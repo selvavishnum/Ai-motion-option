@@ -1,0 +1,7 @@
+services:
+  - type: web
+    name: ai-motion-option
+    runtime: docker
+    plan: free
+    dockerfilePath: ./Dockerfile
+    healthCheckPath: /api/v1/health

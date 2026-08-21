@@ -29,9 +29,27 @@ input — e.g. an open palm to stop, a fist to start, a thumbs up to confirm.
 frames to `/ws/motion` over the WebSocket, and shows the detected gesture/action live on
 screen. No app install required — it's a regular web page.
 
-Browsers only allow camera access on `localhost` or over HTTPS, so if your phone reaches the
-server over your LAN IP (not `localhost`) you need an HTTPS tunnel, e.g.
-[ngrok](https://ngrok.com):
+Browsers only allow camera access on `localhost` or over HTTPS, so you need the server
+reachable over HTTPS. Two ways to get there:
+
+### No computer at all — deploy to a free cloud host (Render)
+
+This runs the server in the cloud, so there's nothing to keep running on your own machine —
+you only need a phone/browser to set it up.
+
+1. Fork or push this repo to your own GitHub account.
+2. Go to [render.com](https://dashboard.render.com) on your phone, sign in with GitHub.
+3. **New +** → **Blueprint** → pick this repo. Render reads `render.yaml` and configures
+   everything (Docker build, free plan, health check) automatically.
+4. Click **Deploy**. First build takes a few minutes (it also downloads the hand-tracking
+   model at build time).
+5. Once live, Render gives you an `https://ai-motion-option-xxxx.onrender.com` URL — open it
+   on your phone and tap "Enable camera & start".
+
+Free-tier services spin down after inactivity, so the first request after idling can take
+~30s to wake back up.
+
+### Have a computer — run locally + tunnel
 
 ```bash
 uvicorn app.main:app --host 0.0.0.0 --port 8000   # start the server
