@@ -120,6 +120,9 @@ one-time model download. Targets Android 12+ (`minSdk 31`).
   rule-based classifier as `app/gesture.py`, ported to Kotlin (`gesture/Gesture.kt`), turns
   them into a gesture. Thumb/index-tip distance is tracked continuously across frames for
   pinch-to-zoom, independent of the discrete poses below.
+- **MediaPipe Face Landmarker** (on-device, blendshapes) runs on alternating frames from the
+  same camera feed, classifying blink/eyebrows-up/mouth-open/smile the same way — a second,
+  independent set of triggers mappable to any action, running at the same time as hand poses.
 - An **AccessibilityService** — a permission you must turn on manually in Android Settings,
   since no app can grant this to itself — is what actually acts: it simulates a swipe/tap/pinch
   gesture, a Back/Home/Recents press, or launches another app, exactly as if you'd touched the
@@ -165,6 +168,19 @@ Pinch-to-zoom runs automatically whenever a hand is visible and not making one o
 poses above — it isn't part of the remappable table since it's a continuous motion, not a
 single pose.
 
+**Face gestures** (also remappable, run at the same time as hand gestures, independent
+defaults so the two don't collide):
+
+| Face gesture   | Default action |
+| -------------- | -------------- |
+| Blink          | Tap            |
+| Eyebrows up    | Back           |
+| Mouth open     | Home           |
+| Smile          | Recents        |
+
+Tap **Gesture guide** in the app for a visual cheat-sheet of every hand and face gesture, how
+to perform it, and its current mapped action.
+
 ### Install it (no computer needed)
 
 Every push to `main` under `android/` auto-builds via GitHub Actions
@@ -182,13 +198,22 @@ Every push to `main` under `android/` auto-builds via GitHub Actions
    apps" for your browser/file manager the first time — allow it. On ColorOS/Realme UI:
    **Settings → Additional Settings → Privacy → Special app access → Install unknown apps**
    → pick the app you're installing from → allow it there specifically.
-3. Open the app, tap **Grant camera permission**, then **Turn on Accessibility permission**
-   (this opens Android Settings — find "Air Sensor" under Downloaded/Installed apps and
-   enable it). Optionally also **Allow floating status bubble** and **Ignore battery
-   optimization** (recommended so the background service survives OEM battery managers).
-4. Flip the **Gesture control running** switch on.
-5. Switch to any app (Reels, Shorts, Kindle, a browser) and show a gesture in front of the
+3. If **Turn on Accessibility permission** or **Allow floating status bubble** shows "App was
+   denied access" with no toggle: Android 13+ blocks these "restricted settings" by default for
+   any app installed outside the Play Store. Go to **Settings → Apps → Air Sensor → ⋮ (top
+   right) → Allow restricted settings**, then try again — one-time per install.
+4. Grant camera + Accessibility, then optionally **Allow floating status bubble** and
+   **Ignore battery optimization** (recommended so the background service survives OEM
+   battery managers).
+5. Flip the **Gesture control running** switch on.
+6. Switch to any app (Reels, Shorts, Kindle, a browser) and show a gesture in front of the
    front camera.
+
+Also worth knowing: Google Play Protect may show "App blocked to protect your device" for this
+class of app (Camera + Accessibility + Overlay + background-run permissions together look like
+spyware to an automated scanner, even though this is exactly what a gesture-control app needs).
+To install anyway: **Play Store → profile icon → Play Protect → gear icon → turn off "Scan
+apps with Play Protect"**, install, then turn scanning back on.
 
 ### Build it yourself
 

@@ -19,6 +19,14 @@
             android:textSize="24sp"
             android:textStyle="bold" />
 
+        <Button
+            android:id="@+id/gestureGuideButton"
+            style="@style/Widget.MaterialComponents.Button.OutlinedButton"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="8dp"
+            android:text="Gesture guide" />
+
         <TextView
             android:id="@+id/statusText"
             android:layout_width="wrap_content"
@@ -91,6 +99,30 @@
 
         <androidx.recyclerview.widget.RecyclerView
             android:id="@+id/mappingList"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="8dp"
+            android:nestedScrollingEnabled="false" />
+
+        <TextView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="24dp"
+            android:text="Face gesture mapping"
+            android:textColor="@color/onSurface"
+            android:textSize="18sp"
+            android:textStyle="bold" />
+
+        <TextView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="2dp"
+            android:text="Blink, raised eyebrows, open mouth, or a smile — detected the same way as hand poses."
+            android:textColor="@color/muted"
+            android:textSize="12sp" />
+
+        <androidx.recyclerview.widget.RecyclerView
+            android:id="@+id/faceMappingList"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:layout_marginTop="8dp"

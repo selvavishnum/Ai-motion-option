@@ -18,6 +18,11 @@ import androidx.core.content.ContextCompat
 import androidx.lifecycle.LifecycleService
 import com.aimotion.handsfree.MainActivity
 import com.aimotion.handsfree.R
+import com.aimotion.handsfree.face.FaceGesture
+import com.aimotion.handsfree.face.FaceLandmarkerHelper
+import com.aimotion.handsfree.face.FaceMappingStore
+import com.aimotion.handsfree.face.blendshapeMap
+import com.aimotion.handsfree.face.classifyFaceGesture
 import java.util.concurrent.Executors
 
 private const val TAG = "GestureControlService"
@@ -39,11 +44,14 @@ private const val PINCH_COOLDOWN_MS = 250L
 class GestureControlService : LifecycleService() {
 
     private lateinit var mappingStore: GestureMappingStore
+    private lateinit var faceMappingStore: FaceMappingStore
     private var handLandmarkerHelper: HandLandmarkerHelper? = null
+    private var faceLandmarkerHelper: FaceLandmarkerHelper? = null
     private var cameraProvider: ProcessCameraProvider? = null
     private val analysisExecutor = Executors.newSingleThreadExecutor()
 
     private var lastFrameAtMs = 0L
+    private var frameCounter = 0
     private var lastFiredAtMs = 0L
     private var candidateGesture: Gesture = Gesture.UNKNOWN
     private var candidateStreak = 0
@@ -51,11 +59,17 @@ class GestureControlService : LifecycleService() {
     private var lastPinchDistance: Float? = null
     private var lastPinchFiredAtMs = 0L
 
+    private var lastFaceFiredAtMs = 0L
+    private var candidateFaceGesture: FaceGesture? = null
+    private var candidateFaceStreak = 0
+
     override fun onCreate() {
         super.onCreate()
         mappingStore = GestureMappingStore(this)
+        faceMappingStore = FaceMappingStore(this)
         startForeground(NOTIFICATION_ID, buildNotification())
         handLandmarkerHelper = HandLandmarkerHelper(this) { result -> onLandmarkResult(result) }
+        faceLandmarkerHelper = FaceLandmarkerHelper(this) { result -> onFaceResult(result) }
         startCamera()
     }
 
@@ -63,6 +77,7 @@ class GestureControlService : LifecycleService() {
         super.onDestroy()
         cameraProvider?.unbindAll()
         handLandmarkerHelper?.close()
+        faceLandmarkerHelper?.close()
         analysisExecutor.shutdown()
     }
 
@@ -100,7 +115,15 @@ class GestureControlService : LifecycleService() {
         }
         lastFrameAtMs = now
         val bitmap: Bitmap = imageProxy.toBitmap()
-        handLandmarkerHelper?.detectAsync(bitmap, now)
+        // Alternate hand/face detection per frame rather than running both models every frame —
+        // keeps per-frame cost down on mid-range phones while still updating each ~2-3x/sec,
+        // plenty for discrete gesture/expression debouncing.
+        frameCounter++
+        if (frameCounter % 2 == 0) {
+            handLandmarkerHelper?.detectAsync(bitmap, now)
+        } else {
+            faceLandmarkerHelper?.detectAsync(bitmap, now)
+        }
         imageProxy.close()
     }
 
@@ -165,6 +188,35 @@ class GestureControlService : LifecycleService() {
         val action = mappingStore.load()[gesture] ?: return
         lastFiredAtMs = now
         candidateStreak = 0
+        ActionDispatcher.fire(action)
+    }
+
+    private fun onFaceResult(result: com.google.mediapipe.tasks.vision.facelandmarker.FaceLandmarkerResult) {
+        val blendshapes = result.blendshapeMap()
+        val detected = blendshapes?.let { classifyFaceGesture(it) }
+        handleDetectedFaceGesture(detected)
+    }
+
+    private fun handleDetectedFaceGesture(gesture: FaceGesture?) {
+        if (gesture == null) {
+            candidateFaceGesture = null
+            candidateFaceStreak = 0
+            return
+        }
+        if (gesture == candidateFaceGesture) {
+            candidateFaceStreak++
+        } else {
+            candidateFaceGesture = gesture
+            candidateFaceStreak = 1
+        }
+        if (candidateFaceStreak < STABLE_FRAMES_REQUIRED) return
+
+        val now = SystemClock.elapsedRealtime()
+        if (now - lastFaceFiredAtMs < ACTION_COOLDOWN_MS) return
+
+        val action = faceMappingStore.load()[gesture] ?: return
+        lastFaceFiredAtMs = now
+        candidateFaceStreak = 0
         ActionDispatcher.fire(action)
     }
 
