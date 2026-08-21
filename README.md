@@ -23,6 +23,24 @@ input — e.g. an open palm to stop, a fist to start, a thumbs up to confirm.
 | Point (index) | `select`  |
 | Peace / victory | `next`  |
 
+## Try it on your phone
+
+`GET /` serves a self-contained mobile web demo: it opens your phone's camera, streams
+frames to `/ws/motion` over the WebSocket, and shows the detected gesture/action live on
+screen. No app install required — it's a regular web page.
+
+Browsers only allow camera access on `localhost` or over HTTPS, so if your phone reaches the
+server over your LAN IP (not `localhost`) you need an HTTPS tunnel, e.g.
+[ngrok](https://ngrok.com):
+
+```bash
+uvicorn app.main:app --host 0.0.0.0 --port 8000   # start the server
+ngrok http 8000                                    # in another terminal, prints an https:// URL
+```
+
+Open the `https://…ngrok…` URL on your phone, tap "Enable camera & start", allow camera
+access, and hold up a gesture (open palm, fist, thumbs up/down, point, peace).
+
 ## API
 
 - `GET /api/v1/health` — liveness check
