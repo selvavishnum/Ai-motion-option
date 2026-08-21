@@ -3,14 +3,18 @@ from __future__ import annotations
 import base64
 import binascii
 from contextlib import asynccontextmanager
+from pathlib import Path
 
 import cv2
 import numpy as np
 from fastapi import FastAPI, HTTPException, UploadFile, WebSocket, WebSocketDisconnect
+from fastapi.responses import FileResponse
 
 from app.gesture import GESTURE_ACTIONS
 from app.hand_tracker import HandTracker
 from app.schemas import DetectResponse, GestureInfo, HealthResponse
+
+_STATIC_DIR = Path(__file__).parent / "static"
 
 _tracker: HandTracker | None = None
 
@@ -40,6 +44,13 @@ def _decode_image(data: bytes) -> np.ndarray:
     if image is None:
         raise HTTPException(status_code=422, detail="could not decode image")
     return image
+
+
+@app.get("/", include_in_schema=False)
+async def demo_page() -> FileResponse:
+    """Mobile-friendly page that opens the camera, streams frames to /ws/motion, and
+    shows the live detected gesture/action — the quickest way to try this on a phone."""
+    return FileResponse(_STATIC_DIR / "index.html")
 
 
 @app.get("/api/v1/health", response_model=HealthResponse)
