@@ -30,10 +30,31 @@ jobs:
           chmod +x ./gradlew
           ./gradlew assembleDebug --no-daemon
 
+      - name: Generate release signing key
+        run: |
+          keytool -genkeypair -v \
+            -keystore "$RUNNER_TEMP/release.keystore" \
+            -alias handsfree -keyalg RSA -keysize 2048 -validity 10950 \
+            -storepass "$RELEASE_KEYSTORE_PASSWORD" -keypass "$RELEASE_KEY_PASSWORD" \
+            -dname "CN=Hands-Free Gestures, OU=Dev, O=Ai-motion-option, C=IN"
+        env:
+          RELEASE_KEYSTORE_PASSWORD: ${{ github.run_id }}handsfree
+          RELEASE_KEY_PASSWORD: ${{ github.run_id }}handsfree
+
+      - name: Build release APK
+        run: ./gradlew assembleRelease --no-daemon
+        env:
+          RELEASE_KEYSTORE_PATH: ${{ runner.temp }}/release.keystore
+          RELEASE_KEYSTORE_PASSWORD: ${{ github.run_id }}handsfree
+          RELEASE_KEY_ALIAS: handsfree
+          RELEASE_KEY_PASSWORD: ${{ github.run_id }}handsfree
+
       - uses: actions/upload-artifact@v4
         with:
-          name: app-debug-apk
-          path: android/app/build/outputs/apk/debug/app-debug.apk
+          name: app-apks
+          path: |
+            android/app/build/outputs/apk/debug/app-debug.apk
+            android/app/build/outputs/apk/release/app-release.apk
 
       # A GitHub Release asset downloads as a raw .apk (unlike a zipped Actions artifact),
       # which is what lets a phone browser install it directly with no unzip step.
@@ -42,12 +63,20 @@ jobs:
         uses: softprops/action-gh-release@v2
         with:
           tag_name: android-latest
-          name: Hands-Free Gestures (latest debug build)
+          name: Hands-Free Gestures (latest build)
           body: |
-            Auto-built debug APK from the latest `main`. Download `app-debug.apk` on your
-            phone and open it to install (enable "install unknown apps" for your browser
-            when prompted).
+            Auto-built from the latest `main`. Two APKs are attached — try `app-release.apk`
+            first (some phones, e.g. ColorOS/Realme UI and MIUI, block the debug-signed one):
+
+            - `app-release.apk` — signed with a real (non-debug) key, generated fresh on
+              every build. Recommended.
+            - `app-debug.apk` — standard debug build, for comparison/debugging.
+
+            Download on your phone and open it to install (enable "install unknown apps"
+            for your browser/file manager when prompted).
           prerelease: true
-          files: android/app/build/outputs/apk/debug/app-debug.apk
+          files: |
+            android/app/build/outputs/apk/debug/app-debug.apk
+            android/app/build/outputs/apk/release/app-release.apk
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
