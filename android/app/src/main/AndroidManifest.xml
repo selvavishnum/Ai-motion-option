@@ -46,6 +46,10 @@
             android:name=".GestureGuideActivity"
             android:exported="false" />
 
+        <activity
+            android:name=".GestureMappingComposeActivity"
+            android:exported="false" />
+
         <service
             android:name=".gesture.GestureControlService"
             android:foregroundServiceType="camera"

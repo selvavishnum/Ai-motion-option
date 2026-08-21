@@ -79,6 +79,9 @@ class MainActivity : AppCompatActivity() {
         binding.gestureGuideButton.setOnClickListener {
             startActivity(Intent(this, GestureGuideActivity::class.java))
         }
+        binding.gestureMappingComposeButton.setOnClickListener {
+            startActivity(Intent(this, GestureMappingComposeActivity::class.java))
+        }
         binding.grantCameraButton.setOnClickListener {
             requestCamera.launch(Manifest.permission.CAMERA)
         }
