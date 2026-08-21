@@ -67,8 +67,11 @@ class MainActivity : AppCompatActivity() {
         val expected = "$packageName/com.aimotion.handsfree.gesture.GestureAccessibilityService"
         val enabled = Settings.Secure.getString(contentResolver, Settings.Secure.ENABLED_ACCESSIBILITY_SERVICES)
             ?: return false
-        return TextUtils.SimpleStringSplitter(':').apply { setString(enabled) }
-            .asSequence().contains(expected)
+        val splitter = TextUtils.SimpleStringSplitter(':').apply { setString(enabled) }
+        while (splitter.hasNext()) {
+            if (splitter.next() == expected) return true
+        }
+        return false
     }
 
     private fun refreshStatus() {
