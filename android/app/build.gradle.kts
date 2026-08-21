@@ -15,9 +15,32 @@ android {
         versionName = "0.1.0"
     }
 
+    signingConfigs {
+        // Release builds need a real (non-debug) signature — some OEM skins (ColorOS/Realme UI,
+        // MIUI, ...) reject sideloaded apps signed with the auto-generated debug key. The
+        // keystore itself is never committed: CI generates one at build time (see
+        // .github/workflows/android-build.yml) and points these env vars at it. Falls back to
+        // the debug keystore for local `./gradlew assembleRelease` runs with no env vars set.
+        create("release") {
+            val keystorePath = System.getenv("RELEASE_KEYSTORE_PATH")
+            if (keystorePath != null) {
+                storeFile = file(keystorePath)
+                storePassword = System.getenv("RELEASE_KEYSTORE_PASSWORD")
+                keyAlias = System.getenv("RELEASE_KEY_ALIAS")
+                keyPassword = System.getenv("RELEASE_KEY_PASSWORD")
+            } else {
+                storeFile = signingConfigs.getByName("debug").storeFile
+                storePassword = signingConfigs.getByName("debug").storePassword
+                keyAlias = signingConfigs.getByName("debug").keyAlias
+                keyPassword = signingConfigs.getByName("debug").keyPassword
+            }
+        }
+    }
+
     buildTypes {
         release {
             isMinifyEnabled = false
+            signingConfig = signingConfigs.getByName("release")
         }
     }
 

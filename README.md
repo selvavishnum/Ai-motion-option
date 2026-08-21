@@ -151,13 +151,21 @@ any installed app from a list) — e.g. make "peace sign" open Instagram directl
 
 ### Install it (no computer needed)
 
-Every push to `main` under `android/` auto-builds a debug APK via GitHub Actions
-(`.github/workflows/android-build.yml`) and publishes it to this repo's
-[Releases](../../releases/tag/android-latest) page as `app-debug.apk`.
+Every push to `main` under `android/` auto-builds via GitHub Actions
+(`.github/workflows/android-build.yml`) and publishes two APKs to this repo's
+[Releases](../../releases/tag/android-latest) page:
 
-1. On your phone, open the repo's Releases page and download `app-debug.apk`.
+- **`app-release.apk` — try this first.** Signed with a real (non-debug) key generated fresh
+  each build. Some OEM skins (ColorOS/Realme UI, MIUI, ...) silently reject debug-signed
+  sideloaded apps with a generic "App not installed" error — the release build avoids that.
+- `app-debug.apk` — standard debug build, kept for comparison if you're debugging an install
+  issue.
+
+1. On your phone, open the repo's Releases page and download `app-release.apk`.
 2. Tap the downloaded file to install; Android will prompt you to allow "install unknown
-   apps" for your browser/file manager the first time — allow it.
+   apps" for your browser/file manager the first time — allow it. On ColorOS/Realme UI:
+   **Settings → Additional Settings → Privacy → Special app access → Install unknown apps**
+   → pick the app you're installing from → allow it there specifically.
 3. Open the app, tap **Grant camera permission**, then **Turn on Accessibility permission**
    (this opens Android Settings — find "Hands-Free Gestures" under Downloaded/Installed
    apps and enable it).
