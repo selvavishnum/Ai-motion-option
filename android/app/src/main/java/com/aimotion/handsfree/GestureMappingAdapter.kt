@@ -8,15 +8,18 @@ import android.widget.AdapterView
 import androidx.recyclerview.widget.RecyclerView
 import com.aimotion.handsfree.databinding.ItemGestureMappingBinding
 import com.aimotion.handsfree.gesture.ActionType
-import com.aimotion.handsfree.gesture.Gesture
 import com.aimotion.handsfree.gesture.GestureAction
 
-class GestureMappingAdapter(
-    private val gestures: List<Gesture>,
-    private val mapping: MutableMap<Gesture, GestureAction>,
-    private val onChanged: (Gesture, GestureAction) -> Unit,
-    private val onChooseApp: (Gesture) -> Unit,
-) : RecyclerView.Adapter<GestureMappingAdapter.ViewHolder>() {
+/** Generic gesture->action mapping list, shared by the hand-gesture and face-gesture sections —
+ * both need the same "pick an action, optionally choose an app" row, just keyed on a different
+ * trigger type ([Gesture] or [FaceGesture]). */
+class GestureMappingAdapter<T : Any>(
+    private val triggers: List<T>,
+    private val labelOf: (T) -> String,
+    private val mapping: MutableMap<T, GestureAction>,
+    private val onChanged: (T, GestureAction) -> Unit,
+    private val onChooseApp: (T) -> Unit,
+) : RecyclerView.Adapter<GestureMappingAdapter<T>.ViewHolder>() {
 
     inner class ViewHolder(val binding: ItemGestureMappingBinding) : RecyclerView.ViewHolder(binding.root)
 
@@ -25,14 +28,14 @@ class GestureMappingAdapter(
         return ViewHolder(binding)
     }
 
-    override fun getItemCount() = gestures.size
+    override fun getItemCount() = triggers.size
 
     override fun onBindViewHolder(holder: ViewHolder, position: Int) {
-        val gesture = gestures[position]
-        val action = mapping.getValue(gesture)
+        val trigger = triggers[position]
+        val action = mapping.getValue(trigger)
         val binding = holder.binding
 
-        binding.gestureName.text = gesture.label.replace('_', ' ').replaceFirstChar { it.uppercase() }
+        binding.gestureName.text = labelOf(trigger).replace('_', ' ').replaceFirstChar { it.uppercase() }
 
         val actionTypes = ActionType.entries.toList()
         binding.actionSpinner.adapter = ArrayAdapter(
@@ -49,14 +52,14 @@ class GestureMappingAdapter(
                 val newType = actionTypes[pos]
                 if (newType == action.type) return
                 val newAction = GestureAction(newType, packageName = null)
-                mapping[gesture] = newAction
-                onChanged(gesture, newAction)
+                mapping[trigger] = newAction
+                onChanged(trigger, newAction)
                 notifyItemChanged(position)
             }
 
             override fun onNothingSelected(parent: AdapterView<*>?) {}
         }
 
-        binding.chooseAppButton.setOnClickListener { onChooseApp(gesture) }
+        binding.chooseAppButton.setOnClickListener { onChooseApp(trigger) }
     }
 }

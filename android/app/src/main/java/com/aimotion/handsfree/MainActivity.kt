@@ -14,6 +14,8 @@ import androidx.appcompat.app.AppCompatActivity
 import androidx.core.content.ContextCompat
 import androidx.recyclerview.widget.LinearLayoutManager
 import com.aimotion.handsfree.databinding.ActivityMainBinding
+import com.aimotion.handsfree.face.FaceGesture
+import com.aimotion.handsfree.face.FaceMappingStore
 import com.aimotion.handsfree.gesture.ActionType
 import com.aimotion.handsfree.gesture.Gesture
 import com.aimotion.handsfree.gesture.GestureAction
@@ -26,6 +28,8 @@ class MainActivity : AppCompatActivity() {
     private lateinit var binding: ActivityMainBinding
     private lateinit var mappingStore: GestureMappingStore
     private lateinit var mapping: MutableMap<Gesture, GestureAction>
+    private lateinit var faceMappingStore: FaceMappingStore
+    private lateinit var faceMapping: MutableMap<FaceGesture, GestureAction>
 
     private val requestCamera = registerForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
         refreshStatus()
@@ -39,15 +43,45 @@ class MainActivity : AppCompatActivity() {
 
         mappingStore = GestureMappingStore(this)
         mapping = mappingStore.load().toMutableMap()
+        faceMappingStore = FaceMappingStore(this)
+        faceMapping = faceMappingStore.load().toMutableMap()
 
         binding.mappingList.layoutManager = LinearLayoutManager(this)
         binding.mappingList.adapter = GestureMappingAdapter(
-            gestures = Gesture.entries.filter { it != Gesture.UNKNOWN },
+            triggers = Gesture.entries.filter { it != Gesture.UNKNOWN },
+            labelOf = { it.label },
             mapping = mapping,
             onChanged = { _, _ -> mappingStore.save(mapping) },
-            onChooseApp = ::showAppPicker,
+            onChooseApp = { gesture ->
+                showAppPicker(gesture.label) { packageName ->
+                    mapping[gesture] = GestureAction(ActionType.LAUNCH_APP, packageName)
+                    mappingStore.save(mapping)
+                    binding.mappingList.adapter?.notifyDataSetChanged()
+                }
+            },
         )
 
+        binding.faceMappingList.layoutManager = LinearLayoutManager(this)
+        binding.faceMappingList.adapter = GestureMappingAdapter(
+            triggers = FaceGesture.entries.toList(),
+            labelOf = { it.label },
+            mapping = faceMapping,
+            onChanged = { _, _ -> faceMappingStore.save(faceMapping) },
+            onChooseApp = { gesture ->
+                showAppPicker(gesture.label) { packageName ->
+                    faceMapping[gesture] = GestureAction(ActionType.LAUNCH_APP, packageName)
+                    faceMappingStore.save(faceMapping)
+                    binding.faceMappingList.adapter?.notifyDataSetChanged()
+                }
+            },
+        )
+
+        binding.gestureGuideButton.setOnClickListener {
+            startActivity(Intent(this, GestureGuideActivity::class.java))
+        }
+        binding.gestureMappingComposeButton.setOnClickListener {
+            startActivity(Intent(this, GestureMappingComposeActivity::class.java))
+        }
         binding.grantCameraButton.setOnClickListener {
             requestCamera.launch(Manifest.permission.CAMERA)
         }
@@ -114,21 +148,15 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
-    private fun showAppPicker(gesture: Gesture) {
+    private fun showAppPicker(triggerLabel: String, onPicked: (String) -> Unit) {
         val launcherIntent = Intent(Intent.ACTION_MAIN).addCategory(Intent.CATEGORY_LAUNCHER)
         val apps = packageManager.queryIntentActivities(launcherIntent, 0)
             .sortedBy { it.loadLabel(packageManager).toString() }
         val labels = apps.map { it.loadLabel(packageManager).toString() }.toTypedArray()
 
         android.app.AlertDialog.Builder(this)
-            .setTitle("Choose app for ${gesture.label}")
-            .setItems(labels) { _, index ->
-                val packageName = apps[index].activityInfo.packageName
-                val newAction = GestureAction(ActionType.LAUNCH_APP, packageName)
-                mapping[gesture] = newAction
-                mappingStore.save(mapping)
-                binding.mappingList.adapter?.notifyDataSetChanged()
-            }
+            .setTitle("Choose app for $triggerLabel")
+            .setItems(labels) { _, index -> onPicked(apps[index].activityInfo.packageName) }
             .show()
     }
 }
