@@ -19,7 +19,7 @@ class GestureMappingAdapter<T : Any>(
     private val mapping: MutableMap<T, GestureAction>,
     private val onChanged: (T, GestureAction) -> Unit,
     private val onChooseApp: (T) -> Unit,
-) : RecyclerView.Adapter<GestureMappingAdapter.ViewHolder>() {
+) : RecyclerView.Adapter<GestureMappingAdapter<T>.ViewHolder>() {
 
     inner class ViewHolder(val binding: ItemGestureMappingBinding) : RecyclerView.ViewHolder(binding.root)
 
