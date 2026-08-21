@@ -27,6 +27,11 @@ private const val MIN_FRAME_INTERVAL_MS = 180L // ~5 fps, plenty for gesture con
 private const val STABLE_FRAMES_REQUIRED = 3
 private const val ACTION_COOLDOWN_MS = 900L
 
+// Pinch-to-zoom is continuous (thumb/index distance change), not a static pose, so it runs on
+// its own faster, separate cooldown rather than the discrete-gesture debounce above.
+private const val PINCH_DISTANCE_DELTA_THRESHOLD = 0.035f // normalized (0..1) coordinate space
+private const val PINCH_COOLDOWN_MS = 250L
+
 /** Foreground service that keeps the front camera running while other apps are on screen,
  * classifies the gesture in each frame on-device, and — once the same gesture has been seen
  * for a few consecutive frames (debounce, avoids misfires) and the cooldown has elapsed
@@ -42,6 +47,9 @@ class GestureControlService : LifecycleService() {
     private var lastFiredAtMs = 0L
     private var candidateGesture: Gesture = Gesture.UNKNOWN
     private var candidateStreak = 0
+
+    private var lastPinchDistance: Float? = null
+    private var lastPinchFiredAtMs = 0L
 
     override fun onCreate() {
         super.onCreate()
@@ -100,6 +108,41 @@ class GestureControlService : LifecycleService() {
         val gestures = result.toGestures()
         val top = gestures.firstOrNull()?.first ?: Gesture.UNKNOWN
         handleDetectedGesture(top)
+
+        // Only track pinch when the hand isn't currently forming one of the discrete poses
+        // above (fist, peace, etc.) — otherwise ordinary thumb/index movement during those
+        // gestures would misfire as a pinch.
+        if (top == Gesture.UNKNOWN) {
+            handlePinchTracking(result)
+        } else {
+            lastPinchDistance = null
+        }
+    }
+
+    private fun handlePinchTracking(result: com.google.mediapipe.tasks.vision.handlandmarker.HandLandmarkerResult) {
+        val landmarks = result.landmarks().firstOrNull()
+        if (landmarks == null || landmarks.size < 9) {
+            lastPinchDistance = null
+            return
+        }
+        val thumbTip = landmarks[4]
+        val indexTip = landmarks[8]
+        val dx = thumbTip.x() - indexTip.x()
+        val dy = thumbTip.y() - indexTip.y()
+        val distance = kotlin.math.sqrt(dx * dx + dy * dy)
+
+        val previous = lastPinchDistance
+        lastPinchDistance = distance
+        if (previous == null) return
+
+        val delta = distance - previous
+        if (kotlin.math.abs(delta) < PINCH_DISTANCE_DELTA_THRESHOLD) return
+
+        val now = SystemClock.elapsedRealtime()
+        if (now - lastPinchFiredAtMs < PINCH_COOLDOWN_MS) return
+
+        lastPinchFiredAtMs = now
+        ActionDispatcher.pinch(zoomIn = delta > 0)
     }
 
     private fun handleDetectedGesture(gesture: Gesture) {

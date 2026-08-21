@@ -42,6 +42,20 @@
             android:layout_marginTop="8dp"
             android:text="Turn on Accessibility permission" />
 
+        <Button
+            android:id="@+id/openOverlayButton"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="8dp"
+            android:text="Allow floating status bubble (optional)" />
+
+        <Button
+            android:id="@+id/openBatteryButton"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="8dp"
+            android:text="Ignore battery optimization (recommended)" />
+
         <com.google.android.material.switchmaterial.SwitchMaterial
             android:id="@+id/serviceSwitch"
             android:layout_width="match_parent"
@@ -49,6 +63,14 @@
             android:layout_marginTop="20dp"
             android:text="Gesture control running"
             android:textColor="@color/onSurface" />
+
+        <TextView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="8dp"
+            android:text="Pinch to zoom works automatically whenever a hand is visible and not making one of the poses below — no mapping needed."
+            android:textColor="@color/muted"
+            android:textSize="12sp" />
 
         <TextView
             android:layout_width="wrap_content"
