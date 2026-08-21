@@ -21,4 +21,8 @@ object ActionDispatcher {
     fun fire(action: GestureAction) {
         serviceRef?.get()?.perform(action)
     }
+
+    fun pinch(zoomIn: Boolean) {
+        serviceRef?.get()?.pinch(zoomIn)
+    }
 }

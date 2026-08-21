@@ -1,6 +1,13 @@
 package com.aimotion.handsfree.gesture
 
-enum class ActionType { SWIPE_UP, SWIPE_DOWN, SWIPE_LEFT, SWIPE_RIGHT, TAP, BACK, HOME, LAUNCH_APP }
+enum class ActionType {
+    SWIPE_UP, SWIPE_DOWN, SWIPE_LEFT, SWIPE_RIGHT, TAP, BACK, HOME, LAUNCH_APP,
+
+    /** Opens the Recents/app-switcher overview — the real, reliable version of "next app".
+     * Android exposes no API for silently jumping to a specific other app; only the switcher
+     * UI is available, same as swiping up-and-hold on stock Android gesture navigation. */
+    RECENTS,
+}
 
 data class GestureAction(val type: ActionType, val packageName: String? = null) {
     fun describe(): String = when (type) {

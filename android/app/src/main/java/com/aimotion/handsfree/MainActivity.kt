@@ -1,9 +1,12 @@
 package com.aimotion.handsfree
 
 import android.Manifest
+import android.content.Context
 import android.content.Intent
 import android.content.pm.PackageManager
+import android.net.Uri
 import android.os.Bundle
+import android.os.PowerManager
 import android.provider.Settings
 import android.text.TextUtils
 import androidx.activity.result.contract.ActivityResultContracts
@@ -16,6 +19,7 @@ import com.aimotion.handsfree.gesture.Gesture
 import com.aimotion.handsfree.gesture.GestureAction
 import com.aimotion.handsfree.gesture.GestureControlService
 import com.aimotion.handsfree.gesture.GestureMappingStore
+import com.aimotion.handsfree.overlay.OverlayBubbleService
 
 class MainActivity : AppCompatActivity() {
 
@@ -50,6 +54,13 @@ class MainActivity : AppCompatActivity() {
         binding.openAccessibilityButton.setOnClickListener {
             startActivity(Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS))
         }
+        binding.openOverlayButton.setOnClickListener {
+            startActivity(Intent(Settings.ACTION_MANAGE_OVERLAY_PERMISSION, Uri.parse("package:$packageName")))
+        }
+        binding.openBatteryButton.setOnClickListener {
+            @Suppress("BatteryLife")
+            startActivity(Intent(Settings.ACTION_REQUEST_IGNORE_BATTERY_OPTIMIZATIONS, Uri.parse("package:$packageName")))
+        }
         binding.serviceSwitch.setOnCheckedChangeListener { _, checked ->
             if (checked) maybeStartService() else GestureControlService.stop(this)
         }
@@ -58,6 +69,7 @@ class MainActivity : AppCompatActivity() {
     override fun onResume() {
         super.onResume()
         refreshStatus()
+        if (Settings.canDrawOverlays(this)) OverlayBubbleService.start(this)
     }
 
     private fun hasCameraPermission() =
@@ -77,12 +89,22 @@ class MainActivity : AppCompatActivity() {
     private fun refreshStatus() {
         val cameraOk = hasCameraPermission()
         val a11yOk = isAccessibilityServiceEnabled()
+        val overlayOk = Settings.canDrawOverlays(this)
+        val batteryOk = (getSystemService(Context.POWER_SERVICE) as PowerManager)
+            .isIgnoringBatteryOptimizations(packageName)
+
         binding.statusText.text = buildString {
             append(if (cameraOk) "Camera: granted" else "Camera: not granted")
             append(" · ")
             append(if (a11yOk) "Accessibility: on" else "Accessibility: off")
+            append(" · ")
+            append(if (overlayOk) "Overlay: on" else "Overlay: off")
+            append(" · ")
+            append(if (batteryOk) "Battery: unrestricted" else "Battery: restricted")
         }
         binding.grantCameraButton.isEnabled = !cameraOk
+        binding.openOverlayButton.isEnabled = !overlayOk
+        binding.openBatteryButton.isEnabled = !batteryOk
         binding.serviceSwitch.isEnabled = cameraOk && a11yOk
     }
 

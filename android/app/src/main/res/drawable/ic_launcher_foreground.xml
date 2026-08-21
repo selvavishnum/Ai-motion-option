@@ -1,0 +1,44 @@
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="108dp"
+    android:height="108dp"
+    android:viewportWidth="108"
+    android:viewportHeight="108">
+    <!-- Palm: thumb + four fingers + base, a simple raised-hand "gesture" glyph. -->
+    <path
+        android:pathData="M20,64 L31,50 L41,58 L33,72 Z"
+        android:fillColor="#F5F7FF" />
+    <path
+        android:pathData="M34,18 h8 v36 h-8 z"
+        android:fillColor="#F5F7FF" />
+    <path
+        android:pathData="M44,12 h8 v42 h-8 z"
+        android:fillColor="#F5F7FF" />
+    <path
+        android:pathData="M54,16 h8 v38 h-8 z"
+        android:fillColor="#F5F7FF" />
+    <path
+        android:pathData="M64,22 h8 v32 h-8 z"
+        android:fillColor="#F5F7FF" />
+    <path
+        android:pathData="M30,50 h48 v32 h-48 z"
+        android:fillColor="#F5F7FF" />
+    <!-- Motion-arc "gesture in progress" swoosh, upper right. -->
+    <path
+        android:pathData="M83.76,30.24 A6,6 0 1 1 92.24,21.76"
+        android:strokeColor="#8AB4FF"
+        android:strokeWidth="2.4"
+        android:strokeLineCap="round"
+        android:fillColor="#00000000" />
+    <path
+        android:pathData="M80.22,33.78 A11,11 0 1 1 95.78,18.22"
+        android:strokeColor="#8AB4FF"
+        android:strokeWidth="2.4"
+        android:strokeLineCap="round"
+        android:fillColor="#00000000" />
+    <path
+        android:pathData="M76.69,37.31 A16,16 0 1 1 99.31,14.69"
+        android:strokeColor="#8AB4FF"
+        android:strokeWidth="2.4"
+        android:strokeLineCap="round"
+        android:fillColor="#00000000" />
+</vector>

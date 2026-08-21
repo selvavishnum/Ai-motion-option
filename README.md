@@ -103,13 +103,14 @@ pytest
 dependencies required at import time. `tests/test_api.py` exercises the full FastAPI app,
 including the WebSocket streaming endpoint.
 
-## Android app: system-wide gesture control
+## Android app: Air Sensor — system-wide gesture control
 
 Unlike the web demo above (which only reacts inside its own page), the Android app in
-`android/` runs entirely on-device and can control **whatever app is currently on screen** —
-scroll Reels/Shorts, turn a Kindle page, scroll a browser article, go back/home, or launch
-another app — using air-gestures picked up by the front camera. No server needed; detection
-runs fully offline after the one-time model download.
+`android/` (app name **Air Sensor**) runs entirely on-device and can control **whatever app is
+currently on screen** — scroll Reels/Shorts, turn a Kindle page, pinch-zoom a photo, scroll a
+browser article, go back/home, open the app switcher, or launch another app — using air-gestures
+picked up by the front camera. No server needed; detection runs fully offline after the
+one-time model download. Targets Android 12+ (`minSdk 31`).
 
 ### How it works
 
@@ -117,37 +118,52 @@ runs fully offline after the one-time model download.
   another app is in the foreground.
 - **MediaPipe Hand Landmarker** (on-device) finds hand landmarks in each frame; the same
   rule-based classifier as `app/gesture.py`, ported to Kotlin (`gesture/Gesture.kt`), turns
-  them into a gesture.
+  them into a gesture. Thumb/index-tip distance is tracked continuously across frames for
+  pinch-to-zoom, independent of the discrete poses below.
 - An **AccessibilityService** — a permission you must turn on manually in Android Settings,
-  since no app can grant this to itself — is what actually acts: it simulates a swipe/tap
-  gesture, or a Back/Home press, or launches another app, exactly as if you'd touched the
+  since no app can grant this to itself — is what actually acts: it simulates a swipe/tap/pinch
+  gesture, a Back/Home/Recents press, or launches another app, exactly as if you'd touched the
   screen.
+- An optional **floating status bubble** (the "draw over other apps" permission) confirms the
+  service is watching and gives a one-tap way back into the app, from anywhere.
+- The app can request exemption from OEM battery optimization, which otherwise tends to kill
+  background services on skins like ColorOS/Realme UI and MIUI.
 
 ### Hard limits (Android platform, not this app)
 
+- **"Next app" opens the app switcher, not a silent jump.** Android exposes no API for one
+  app to read or control another app's identity — only the Recents/switcher UI is available,
+  same as swiping up-and-hold on stock gesture navigation. From there, you tap the app.
 - **"Close app" means Home, not force-quit.** Android does not let one app terminate
   another, with or without Accessibility permission — only the user (or root) can.
   "Close" here backgrounds the app via the Home action.
-- **Only works on whatever's visible.** A simulated swipe lands on the foreground app, so
-  gesture control only affects the app currently on screen — same as a real touch would.
-- **Accessibility permission is manual, every time.** This is an Android security
-  requirement, not a bug — no app can silently grant itself this level of control.
+- **Only works on whatever's visible.** A simulated swipe/pinch lands on the foreground app,
+  so gesture control only affects the app currently on screen — same as a real touch would.
+- **Accessibility, overlay, and battery-exemption permissions are manual, every time.** This
+  is an Android security requirement, not a bug — no app can silently grant itself this level
+  of control.
 - **iPhone: not possible.** There is no iOS equivalent to AccessibilityService for
   third-party input injection without jailbreaking.
 
-### Default gestures
+### Gestures
 
-| Gesture       | Default action  |
-| ------------- | --------------- |
-| Open palm     | Back            |
-| Fist          | Home            |
-| Point (index) | Tap             |
-| Peace/victory | Swipe right     |
-| Thumbs up     | Swipe up        |
-| Thumbs down   | Swipe down      |
+| Gesture                              | Default action  |
+| ------------------------------------- | --------------- |
+| Open palm                             | Back            |
+| Fist                                  | Home            |
+| Point (index)                         | Tap             |
+| Peace/victory                         | Swipe right     |
+| Thumbs up                             | Swipe up        |
+| Thumbs down                           | Swipe down      |
+| Hand visible, fingers spreading apart | Pinch zoom in   |
+| Hand visible, fingers pinching in     | Pinch zoom out  |
 
-Every gesture is remappable in the app's settings screen, including to **Launch app** (pick
-any installed app from a list) — e.g. make "peace sign" open Instagram directly.
+Every gesture in the table above is remappable in the app's settings screen — to any of
+Swipe (4 directions), Tap, Back, Home, **Recents** (app switcher / "next app"), or **Launch
+app** (pick any installed app from a list, e.g. make "peace sign" open Instagram directly).
+Pinch-to-zoom runs automatically whenever a hand is visible and not making one of the six
+poses above — it isn't part of the remappable table since it's a continuous motion, not a
+single pose.
 
 ### Install it (no computer needed)
 
@@ -167,8 +183,9 @@ Every push to `main` under `android/` auto-builds via GitHub Actions
    **Settings → Additional Settings → Privacy → Special app access → Install unknown apps**
    → pick the app you're installing from → allow it there specifically.
 3. Open the app, tap **Grant camera permission**, then **Turn on Accessibility permission**
-   (this opens Android Settings — find "Hands-Free Gestures" under Downloaded/Installed
-   apps and enable it).
+   (this opens Android Settings — find "Air Sensor" under Downloaded/Installed apps and
+   enable it). Optionally also **Allow floating status bubble** and **Ignore battery
+   optimization** (recommended so the background service survives OEM battery managers).
 4. Flip the **Gesture control running** switch on.
 5. Switch to any app (Reels, Shorts, Kindle, a browser) and show a gesture in front of the
    front camera.

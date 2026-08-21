@@ -13,6 +13,8 @@ import android.view.accessibility.AccessibilityEvent
 private const val TAG = "GestureA11yService"
 private const val SWIPE_DURATION_MS = 220L
 private const val TAP_DURATION_MS = 60L
+private const val PINCH_DURATION_MS = 180L
+private const val PINCH_SPAN_FRACTION = 0.12f // how far each finger travels, as a fraction of screen width
 
 /** Performs the on-screen effect of a detected air-gesture on whatever app is currently in the
  * foreground: swipe, tap, back, home, or launching another app. This is the only way a
@@ -46,8 +48,39 @@ class GestureAccessibilityService : AccessibilityService() {
             ActionType.TAP -> tap()
             ActionType.BACK -> performGlobalAction(GLOBAL_ACTION_BACK)
             ActionType.HOME -> performGlobalAction(GLOBAL_ACTION_HOME)
+            ActionType.RECENTS -> performGlobalAction(GLOBAL_ACTION_RECENTS)
             ActionType.LAUNCH_APP -> launchApp(action.packageName)
         }
+    }
+
+    /** Simulates a two-finger pinch centered on screen — one increment per call. Driven
+     * directly by continuous thumb/index-distance tracking (see GestureControlService), not
+     * through the discrete gesture->action mapping table, since "pinch" is a motion, not a
+     * single pose. */
+    fun pinch(zoomIn: Boolean) {
+        val (width, height) = screenSize()
+        val cx = width / 2f
+        val cy = height / 2f
+        val span = width * PINCH_SPAN_FRACTION
+
+        val (startOffset, endOffset) = if (zoomIn) 0f to span else span to 0f
+
+        val finger1 = Path().apply {
+            moveTo(cx - startOffset, cy)
+            lineTo(cx - endOffset, cy)
+        }
+        val finger2 = Path().apply {
+            moveTo(cx + startOffset, cy)
+            lineTo(cx + endOffset, cy)
+        }
+        dispatchGesture(
+            GestureDescription.Builder()
+                .addStroke(GestureDescription.StrokeDescription(finger1, 0, PINCH_DURATION_MS))
+                .addStroke(GestureDescription.StrokeDescription(finger2, 0, PINCH_DURATION_MS))
+                .build(),
+            null,
+            null,
+        )
     }
 
     private fun screenSize(): Pair<Int, Int> {
