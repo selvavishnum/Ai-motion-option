@@ -1,8 +1,14 @@
 # Ai-motion-option
 
-A gesture-driven, hands-free motion detection API. Mobile clients send camera frames and
-get back detected hand gestures mapped to actions, so an app can be controlled without touch
-input — e.g. an open palm to stop, a fist to start, a thumbs up to confirm.
+A gesture-driven, hands-free motion detection system. Two parts:
+
+- **`app/`** — a FastAPI service that detects hand gestures from camera frames, for anyone
+  building their own client against it (web, mobile, etc).
+- **`android/`** — a native Android app (see [Android app](#android-app-system-wide-gesture-control)
+  below) that goes further: it uses air-gestures to control **other apps system-wide** —
+  Instagram Reels, YouTube Shorts, Kindle, browser articles — by simulating swipes/taps via
+  Android's Accessibility APIs. This only works on Android; iOS has no equivalent API for
+  third-party gesture injection.
 
 ## Stack
 
@@ -96,3 +102,72 @@ pytest
 `tests/test_gesture.py` covers the pure gesture-classification logic with no vision
 dependencies required at import time. `tests/test_api.py` exercises the full FastAPI app,
 including the WebSocket streaming endpoint.
+
+## Android app: system-wide gesture control
+
+Unlike the web demo above (which only reacts inside its own page), the Android app in
+`android/` runs entirely on-device and can control **whatever app is currently on screen** —
+scroll Reels/Shorts, turn a Kindle page, scroll a browser article, go back/home, or launch
+another app — using air-gestures picked up by the front camera. No server needed; detection
+runs fully offline after the one-time model download.
+
+### How it works
+
+- **CameraX** captures the front camera in a foreground service, continuously, even while
+  another app is in the foreground.
+- **MediaPipe Hand Landmarker** (on-device) finds hand landmarks in each frame; the same
+  rule-based classifier as `app/gesture.py`, ported to Kotlin (`gesture/Gesture.kt`), turns
+  them into a gesture.
+- An **AccessibilityService** — a permission you must turn on manually in Android Settings,
+  since no app can grant this to itself — is what actually acts: it simulates a swipe/tap
+  gesture, or a Back/Home press, or launches another app, exactly as if you'd touched the
+  screen.
+
+### Hard limits (Android platform, not this app)
+
+- **"Close app" means Home, not force-quit.** Android does not let one app terminate
+  another, with or without Accessibility permission — only the user (or root) can.
+  "Close" here backgrounds the app via the Home action.
+- **Only works on whatever's visible.** A simulated swipe lands on the foreground app, so
+  gesture control only affects the app currently on screen — same as a real touch would.
+- **Accessibility permission is manual, every time.** This is an Android security
+  requirement, not a bug — no app can silently grant itself this level of control.
+- **iPhone: not possible.** There is no iOS equivalent to AccessibilityService for
+  third-party input injection without jailbreaking.
+
+### Default gestures
+
+| Gesture       | Default action  |
+| ------------- | --------------- |
+| Open palm     | Back            |
+| Fist          | Home            |
+| Point (index) | Tap             |
+| Peace/victory | Swipe right     |
+| Thumbs up     | Swipe up        |
+| Thumbs down   | Swipe down      |
+
+Every gesture is remappable in the app's settings screen, including to **Launch app** (pick
+any installed app from a list) — e.g. make "peace sign" open Instagram directly.
+
+### Install it (no computer needed)
+
+Every push to `main` under `android/` auto-builds a debug APK via GitHub Actions
+(`.github/workflows/android-build.yml`) and publishes it to this repo's
+[Releases](../../releases/tag/android-latest) page as `app-debug.apk`.
+
+1. On your phone, open the repo's Releases page and download `app-debug.apk`.
+2. Tap the downloaded file to install; Android will prompt you to allow "install unknown
+   apps" for your browser/file manager the first time — allow it.
+3. Open the app, tap **Grant camera permission**, then **Turn on Accessibility permission**
+   (this opens Android Settings — find "Hands-Free Gestures" under Downloaded/Installed
+   apps and enable it).
+4. Flip the **Gesture control running** switch on.
+5. Switch to any app (Reels, Shorts, Kindle, a browser) and show a gesture in front of the
+   front camera.
+
+### Build it yourself
+
+```bash
+cd android
+./gradlew assembleDebug   # needs the Android SDK; see android/app/build.gradle.kts for versions
+```

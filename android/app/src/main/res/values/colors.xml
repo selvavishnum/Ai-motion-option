@@ -1,0 +1,7 @@
+<resources>
+    <color name="brand">#3D6BFF</color>
+    <color name="background">#0B0C10</color>
+    <color name="surface">#16171D</color>
+    <color name="onSurface">#E8E8EC</color>
+    <color name="muted">#9A9AA2</color>
+</resources>

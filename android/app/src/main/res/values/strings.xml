@@ -1,0 +1,6 @@
+<resources>
+    <string name="app_name">Hands-Free Gestures</string>
+    <string name="accessibility_service_description">Lets air-gestures detected via the front camera control other apps: swipe, tap, back, home, and launching apps.</string>
+    <string name="notification_channel_name">Gesture control running</string>
+    <string name="notification_text">Watching for hand gestures</string>
+</resources>
