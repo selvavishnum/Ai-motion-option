@@ -12,6 +12,8 @@
     <!-- Lets the app ask the OEM battery manager not to kill its background service — needed
          on aggressive skins like ColorOS/Realme UI and MIUI. -->
     <uses-permission android:name="android.permission.REQUEST_IGNORE_BATTERY_OPTIMIZATIONS" />
+    <!-- Briefly wakes the display for the "open palm" gesture. -->
+    <uses-permission android:name="android.permission.WAKE_LOCK" />
 
     <uses-feature android:name="android.hardware.camera.front" android:required="false" />
     <uses-feature android:name="android.hardware.camera" android:required="true" />

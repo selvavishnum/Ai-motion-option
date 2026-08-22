@@ -21,6 +21,7 @@ import com.aimotion.handsfree.gesture.Gesture
 import com.aimotion.handsfree.gesture.GestureAction
 import com.aimotion.handsfree.gesture.GestureControlService
 import com.aimotion.handsfree.gesture.GestureMappingStore
+import com.aimotion.handsfree.gesture.MAPPABLE_GESTURES
 import com.aimotion.handsfree.overlay.OverlayBubbleService
 
 class MainActivity : AppCompatActivity() {
@@ -48,7 +49,7 @@ class MainActivity : AppCompatActivity() {
 
         binding.mappingList.layoutManager = LinearLayoutManager(this)
         binding.mappingList.adapter = GestureMappingAdapter(
-            triggers = Gesture.entries.filter { it != Gesture.UNKNOWN },
+            triggers = MAPPABLE_GESTURES,
             labelOf = { it.label },
             mapping = mapping,
             onChanged = { _, _ -> mappingStore.save(mapping) },

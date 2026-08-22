@@ -26,10 +26,12 @@ import kotlinx.coroutines.withContext
 
 private val HAND_EMOJI = mapOf(
     "open_palm" to "✋", "fist" to "✊", "thumbs_up" to "👍",
-    "thumbs_down" to "👎", "point" to "☝️", "peace" to "✌️",
+    "thumbs_down" to "👎", "peace" to "✌️",
 )
 private val FACE_EMOJI = mapOf(
     "blink" to "😉", "eyebrows_up" to "😲", "mouth_open" to "😮", "smile" to "😄",
+    "wink_left" to "😉", "wink_right" to "😜", "eyebrows_down" to "🥺",
+    "gaze_left" to "👈", "gaze_right" to "👉",
 )
 
 private fun String.toTitleLabel() = replace('_', ' ').replaceFirstChar { it.uppercase() }

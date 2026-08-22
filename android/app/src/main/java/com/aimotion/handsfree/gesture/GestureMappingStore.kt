@@ -3,6 +3,12 @@ package com.aimotion.handsfree.gesture
 import android.content.Context
 import org.json.JSONObject
 
+/** Gestures that appear in the remappable mapping table/UI. [Gesture.UNKNOWN] is a
+ * classification fallback, not a real trigger; [Gesture.POINT] drives the continuous
+ * finger-trackpad instead of a single fixed action (see GestureControlService), so neither has
+ * an entry in [DEFAULT_MAPPING] and both are excluded here. */
+val MAPPABLE_GESTURES: List<Gesture> = Gesture.entries.filter { it != Gesture.UNKNOWN && it != Gesture.POINT }
+
 /** Persists the user's gesture → action mapping as a small JSON blob in SharedPreferences. */
 class GestureMappingStore(context: Context) {
     private val prefs = context.getSharedPreferences("gesture_mapping", Context.MODE_PRIVATE)
@@ -11,7 +17,7 @@ class GestureMappingStore(context: Context) {
         val raw = prefs.getString(KEY, null) ?: return DEFAULT_MAPPING
         return try {
             val json = JSONObject(raw)
-            Gesture.entries.filter { it != Gesture.UNKNOWN }.associateWith { gesture ->
+            MAPPABLE_GESTURES.associateWith { gesture ->
                 val entry = json.optJSONObject(gesture.name)
                     ?: return@associateWith DEFAULT_MAPPING.getValue(gesture)
                 GestureAction(

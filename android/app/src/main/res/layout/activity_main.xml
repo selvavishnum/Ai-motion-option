@@ -84,7 +84,7 @@
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
             android:layout_marginTop="8dp"
-            android:text="Pinch to zoom works automatically whenever a hand is visible and not making one of the poses below — no mapping needed."
+            android:text="Always on, not in the list below: two-finger pinch zooms in/out, and a single pointed finger is a mini air-trackpad — move it to turn/scroll, hold it still to tap/select."
             android:textColor="@color/muted"
             android:textSize="12sp" />
 
