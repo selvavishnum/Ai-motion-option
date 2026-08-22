@@ -37,6 +37,12 @@ class OverlayBubbleService : Service() {
         addBubble()
     }
 
+    override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
+        // START_STICKY: if the OS kills this process under memory pressure, restart the bubble
+        // automatically rather than leaving it silently gone until the user reopens the app.
+        return START_STICKY
+    }
+
     override fun onDestroy() {
         super.onDestroy()
         bubbleView?.let { windowManager?.removeView(it) }

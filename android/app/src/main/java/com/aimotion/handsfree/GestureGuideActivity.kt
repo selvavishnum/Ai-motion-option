@@ -14,28 +14,34 @@ import com.aimotion.handsfree.gesture.DEFAULT_MAPPING
 private data class GuideEntry(val emoji: String, val title: String, val howTo: String)
 
 private val HAND_HOW_TO = mapOf(
-    "open_palm" to "Hold your open hand up, fingers spread, palm facing the camera.",
-    "fist" to "Curl all fingers and thumb into a closed fist.",
+    "open_palm" to "Hold your open hand up, fingers spread, palm facing the camera. Wakes the screen.",
+    "fist" to "Curl all fingers and thumb into a closed fist. Closing your palm goes home.",
     "thumbs_up" to "Curl your fingers, extend only your thumb pointing up.",
     "thumbs_down" to "Curl your fingers, extend only your thumb pointing down.",
-    "point" to "Curl your fingers, extend only your index finger.",
     "peace" to "Extend index and middle finger in a V, curl the rest.",
 )
 
 private val HAND_EMOJI = mapOf(
     "open_palm" to "✋", "fist" to "✊", "thumbs_up" to "👍",
-    "thumbs_down" to "👎", "point" to "☝️", "peace" to "✌️",
+    "thumbs_down" to "👎", "peace" to "✌️",
 )
 
 private val FACE_HOW_TO = mapOf(
     "blink" to "Close both eyes briefly, then open them.",
     "eyebrows_up" to "Raise both eyebrows, like a surprised look.",
+    "eyebrows_down" to "Lower/furrow both eyebrows.",
     "mouth_open" to "Open your mouth/jaw noticeably, like a yawn.",
     "smile" to "Smile with both corners of your mouth.",
+    "wink_left" to "Close only your left eye briefly, keep the right eye open.",
+    "wink_right" to "Close only your right eye briefly, keep the left eye open.",
+    "gaze_left" to "Keep your head still, look left with your eyes.",
+    "gaze_right" to "Keep your head still, look right with your eyes.",
 )
 
 private val FACE_EMOJI = mapOf(
     "blink" to "😉", "eyebrows_up" to "😲", "mouth_open" to "😮", "smile" to "😄",
+    "wink_left" to "😉", "wink_right" to "😜", "eyebrows_down" to "🥺",
+    "gaze_left" to "👈", "gaze_right" to "👉",
 )
 
 class GestureGuideActivity : AppCompatActivity() {
@@ -55,7 +61,18 @@ class GestureGuideActivity : AppCompatActivity() {
                     title = "${gesture.label.replace('_', ' ').replaceFirstChar { it.uppercase() }} → ${action.describe()}",
                     howTo = HAND_HOW_TO[gesture.label] ?: "",
                 )
-            }
+            } + listOf(
+                GuideEntry(
+                    emoji = "☝️",
+                    title = "Point → Air trackpad",
+                    howTo = "Extend only your index finger. Move it to turn/scroll, hold it still to tap/select.",
+                ),
+                GuideEntry(
+                    emoji = "🤏",
+                    title = "Two fingers → Pinch zoom",
+                    howTo = "Extend index and middle finger, then move them apart or together to zoom in/out.",
+                ),
+            )
         binding.handGuideList.layoutManager = LinearLayoutManager(this)
         binding.handGuideList.adapter = GuideAdapter(handEntries)
 

@@ -63,3 +63,30 @@ fun FaceLandmarkerResult.blendshapeMap(): Map<String, Float>? {
     val shapes = faceBlendshapes().orElse(null)?.firstOrNull() ?: return null
     return shapes.associate { it.categoryName() to it.score() }
 }
+
+// Standard MediaPipe Face Landmarker topology indices (478-point mesh, iris included).
+private const val LEFT_EYE_CORNER_A = 33
+private const val LEFT_EYE_CORNER_B = 133
+private const val LEFT_IRIS_CENTER = 468
+private const val RIGHT_EYE_CORNER_A = 263
+private const val RIGHT_EYE_CORNER_B = 362
+private const val RIGHT_IRIS_CENTER = 473
+
+/** Signed, eye-width-normalized average horizontal iris offset across both eyes (see
+ * [classifyGaze]), or null if the face/expected landmark indices aren't present. */
+fun FaceLandmarkerResult.gazeOffset(): Float? {
+    val landmarks = faceLandmarks().firstOrNull() ?: return null
+    if (landmarks.size <= RIGHT_IRIS_CENTER) return null
+
+    fun eyeOffset(cornerA: Int, cornerB: Int, iris: Int): Float {
+        val ax = landmarks[cornerA].x()
+        val bx = landmarks[cornerB].x()
+        val center = (ax + bx) / 2f
+        val width = kotlin.math.abs(bx - ax).coerceAtLeast(1e-4f)
+        return (landmarks[iris].x() - center) / (width / 2f)
+    }
+
+    val leftOffset = eyeOffset(LEFT_EYE_CORNER_A, LEFT_EYE_CORNER_B, LEFT_IRIS_CENTER)
+    val rightOffset = eyeOffset(RIGHT_EYE_CORNER_A, RIGHT_EYE_CORNER_B, RIGHT_IRIS_CENTER)
+    return (leftOffset + rightOffset) / 2f
+}

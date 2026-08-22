@@ -23,19 +23,30 @@ import com.aimotion.handsfree.face.FaceLandmarkerHelper
 import com.aimotion.handsfree.face.FaceMappingStore
 import com.aimotion.handsfree.face.blendshapeMap
 import com.aimotion.handsfree.face.classifyFaceGesture
+import com.aimotion.handsfree.face.classifyGaze
+import com.aimotion.handsfree.face.gazeOffset
+import com.aimotion.handsfree.overlay.OverlayBubbleService
 import java.util.concurrent.Executors
 
 private const val TAG = "GestureControlService"
 private const val CHANNEL_ID = "gesture_control"
 private const val NOTIFICATION_ID = 1
 private const val MIN_FRAME_INTERVAL_MS = 180L // ~5 fps, plenty for gesture control
-private const val STABLE_FRAMES_REQUIRED = 3
-private const val ACTION_COOLDOWN_MS = 900L
+// Debounce for the "big" discrete actions (Home, Back, wake, wink, ...): fast enough to feel
+// responsive, but still requires two consecutive matching frames + a cooldown so a hand/face
+// passing briefly through a pose mid-motion can't misfire something disruptive.
+private const val STABLE_FRAMES_REQUIRED = 2
+private const val ACTION_COOLDOWN_MS = 600L
 
-// Pinch-to-zoom is continuous (thumb/index distance change), not a static pose, so it runs on
-// its own faster, separate cooldown rather than the discrete-gesture debounce above.
+// Pinch-to-zoom and the finger-trackpad (below) are continuous motions, not static poses, so
+// they run on their own faster, separate cooldowns — they're meant to feel like actually
+// dragging/scrolling, not like a discrete, debounced button press.
 private const val PINCH_DISTANCE_DELTA_THRESHOLD = 0.035f // normalized (0..1) coordinate space
-private const val PINCH_COOLDOWN_MS = 250L
+private const val PINCH_COOLDOWN_MS = 220L
+
+private const val TRACKPAD_MOVE_THRESHOLD = 0.045f // normalized (0..1) coordinate space
+private const val TRACKPAD_COOLDOWN_MS = 200L
+private const val TRACKPAD_HOLD_FRAMES_FOR_TAP = 2
 
 /** Foreground service that keeps the front camera running while other apps are on screen,
  * classifies the gesture in each frame on-device, and — once the same gesture has been seen
@@ -59,6 +70,10 @@ class GestureControlService : LifecycleService() {
     private var lastPinchDistance: Float? = null
     private var lastPinchFiredAtMs = 0L
 
+    private var lastPointPos: Pair<Float, Float>? = null
+    private var pointHoldStreak = 0
+    private var lastTrackpadFiredAtMs = 0L
+
     private var lastFaceFiredAtMs = 0L
     private var candidateFaceGesture: FaceGesture? = null
     private var candidateFaceStreak = 0
@@ -71,6 +86,9 @@ class GestureControlService : LifecycleService() {
         handLandmarkerHelper = HandLandmarkerHelper(this) { result -> onLandmarkResult(result) }
         faceLandmarkerHelper = FaceLandmarkerHelper(this) { result -> onFaceResult(result) }
         startCamera()
+        // Ensure the status bubble is showing whenever gesture control is, not only when
+        // MainActivity happens to be open — a no-op if the overlay permission isn't granted.
+        OverlayBubbleService.start(this)
     }
 
     override fun onDestroy() {
@@ -130,16 +148,79 @@ class GestureControlService : LifecycleService() {
     private fun onLandmarkResult(result: com.google.mediapipe.tasks.vision.handlandmarker.HandLandmarkerResult) {
         val gestures = result.toGestures()
         val top = gestures.firstOrNull()?.first ?: Gesture.UNKNOWN
-        handleDetectedGesture(top)
 
-        // Only track pinch when the hand isn't currently forming one of the discrete poses
-        // above (fist, peace, etc.) — otherwise ordinary thumb/index movement during those
-        // gestures would misfire as a pinch.
-        if (top == Gesture.UNKNOWN) {
-            handlePinchTracking(result)
-        } else {
-            lastPinchDistance = null
+        when (top) {
+            // A single extended index finger drives the continuous mini-trackpad below instead
+            // of a fixed discrete action, so it's kept out of the discrete debounce entirely.
+            Gesture.POINT -> {
+                candidateGesture = Gesture.UNKNOWN
+                candidateStreak = 0
+                lastPinchDistance = null
+                handleFingerTrackpad(result)
+            }
+            Gesture.UNKNOWN -> {
+                handleDetectedGesture(Gesture.UNKNOWN)
+                handlePinchTracking(result)
+                resetTrackpad()
+            }
+            else -> {
+                handleDetectedGesture(top)
+                lastPinchDistance = null
+                resetTrackpad()
+            }
         }
+    }
+
+    /** A single extended index finger acts as an air mini-trackpad: move it to swipe (turn
+     * left/right, scroll up/down), hold it still to tap/select — a continuous motion, so it
+     * runs on its own fast cooldown rather than the discrete-gesture debounce, and fires fixed
+     * actions directly (not through the remappable mapping table). Direction sign (which way is
+     * "right") depends on whether the camera frame the landmarks come from is mirrored; verify
+     * on-device and flip the two branches below if turn/scroll feels reversed. */
+    private fun handleFingerTrackpad(result: com.google.mediapipe.tasks.vision.handlandmarker.HandLandmarkerResult) {
+        val landmarks = result.landmarks().firstOrNull()
+        if (landmarks == null || landmarks.size < 9) {
+            resetTrackpad()
+            return
+        }
+        val tip = landmarks[8]
+        val pos = tip.x() to tip.y()
+        val previous = lastPointPos
+        lastPointPos = pos
+        if (previous == null) {
+            pointHoldStreak = 0
+            return
+        }
+
+        val now = SystemClock.elapsedRealtime()
+        if (now - lastTrackpadFiredAtMs < TRACKPAD_COOLDOWN_MS) return
+
+        val dx = pos.first - previous.first
+        val dy = pos.second - previous.second
+        val movement = kotlin.math.max(kotlin.math.abs(dx), kotlin.math.abs(dy))
+
+        if (movement < TRACKPAD_MOVE_THRESHOLD) {
+            pointHoldStreak++
+            if (pointHoldStreak == TRACKPAD_HOLD_FRAMES_FOR_TAP) {
+                lastTrackpadFiredAtMs = now
+                ActionDispatcher.fire(GestureAction(ActionType.TAP))
+            }
+            return
+        }
+        pointHoldStreak = 0
+
+        val action = if (kotlin.math.abs(dx) > kotlin.math.abs(dy)) {
+            if (dx > 0) ActionType.SWIPE_RIGHT else ActionType.SWIPE_LEFT
+        } else {
+            if (dy > 0) ActionType.SWIPE_DOWN else ActionType.SWIPE_UP
+        }
+        lastTrackpadFiredAtMs = now
+        ActionDispatcher.fire(GestureAction(action))
+    }
+
+    private fun resetTrackpad() {
+        lastPointPos = null
+        pointHoldStreak = 0
     }
 
     private fun handlePinchTracking(result: com.google.mediapipe.tasks.vision.handlandmarker.HandLandmarkerResult) {
@@ -193,7 +274,10 @@ class GestureControlService : LifecycleService() {
 
     private fun onFaceResult(result: com.google.mediapipe.tasks.vision.facelandmarker.FaceLandmarkerResult) {
         val blendshapes = result.blendshapeMap()
+        // Blendshape-based expressions (blink, wink, eyebrows, mouth, smile) take priority —
+        // they're a more reliable signal than gaze, which only kicks in when nothing else fired.
         val detected = blendshapes?.let { classifyFaceGesture(it) }
+            ?: result.gazeOffset()?.let { classifyGaze(it) }
         handleDetectedFaceGesture(detected)
     }
 

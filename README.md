@@ -152,34 +152,60 @@ one-time model download. Targets Android 12+ (`minSdk 31`).
 
 | Gesture                              | Default action  |
 | ------------------------------------- | --------------- |
-| Open palm                             | Back            |
-| Fist                                  | Home            |
-| Point (index)                         | Tap             |
+| Open palm                             | Wake screen     |
+| Fist (closed palm)                    | Home            |
 | Peace/victory                         | Swipe right     |
 | Thumbs up                             | Swipe up        |
 | Thumbs down                           | Swipe down      |
-| Hand visible, fingers spreading apart | Pinch zoom in   |
-| Hand visible, fingers pinching in     | Pinch zoom out  |
+| Point (index), moving                 | Air trackpad: turn/scroll |
+| Point (index), held still             | Air trackpad: tap/select |
+| Two fingers, spreading apart          | Pinch zoom in   |
+| Two fingers, pinching in              | Pinch zoom out  |
 
-Every gesture in the table above is remappable in the app's settings screen — to any of
-Swipe (4 directions), Tap, Back, Home, **Recents** (app switcher / "next app"), or **Launch
-app** (pick any installed app from a list, e.g. make "peace sign" open Instagram directly).
-Pinch-to-zoom runs automatically whenever a hand is visible and not making one of the six
-poses above — it isn't part of the remappable table since it's a continuous motion, not a
-single pose.
+Every discrete pose in the table above (all but the last three rows) is remappable in the
+app's settings screen — to any of Swipe (4 directions), Tap, Back, Home, **Recents** (app
+switcher / "next app"), **Wake screen**, or **Launch app** (pick any installed app from a
+list, e.g. make "peace sign" open Instagram directly). The single-finger air trackpad and
+two-finger pinch-zoom run automatically whenever a hand is visible making that shape — they
+aren't part of the remappable table since they're continuous motions, not single poses:
+moving your pointed finger turns/scrolls in that direction, and holding it still briefly
+taps/selects.
 
 **Face gestures** (also remappable, run at the same time as hand gestures, independent
 defaults so the two don't collide):
 
-| Face gesture   | Default action |
-| -------------- | -------------- |
-| Blink          | Tap            |
-| Eyebrows up    | Back           |
-| Mouth open     | Home           |
-| Smile          | Recents        |
+| Face gesture      | Default action        |
+| ------------------ | --------------------- |
+| Blink (both eyes)  | Select / open app (Tap) |
+| Wink left eye only | Back / exit app        |
+| Wink right eye only| Home                   |
+| Eyebrows up        | Scroll up              |
+| Eyebrows down      | Scroll down            |
+| Look left (gaze)   | Turn/slide left        |
+| Look right (gaze)  | Turn/slide right       |
+| Mouth open         | Recents                |
+| Smile              | Select / open app (Tap) |
 
 Tap **Gesture guide** in the app for a visual cheat-sheet of every hand and face gesture, how
 to perform it, and its current mapped action.
+
+### Known limitations (by design, not bugs)
+
+- **No "screen off" gesture.** Android gives ordinary apps no API to turn the screen off —
+  only Device Admin's `lockNow()` comes close, and that requires a heavy, rarely-granted
+  permission. Palm-close maps to Home instead of a lock; open-palm wakes the screen back up.
+- **The "install unknown sources" / overlay warning on banking apps is not a bug.** Android
+  deliberately blocks overlay windows (and warns about them) on screens a banking/finance app
+  marks as secure, to stop tapjacking-style attacks — the exact pattern used by overlay
+  malware. This app does not attempt to bypass that protection, and won't.
+- **Latency is tuned per gesture, not zero everywhere.** Continuous motions (the air
+  trackpad, pinch-zoom) use a short debounce so they feel closer to real-time. Discrete
+  high-impact actions (Home, Back, wake) keep a slightly longer debounce/cooldown so an
+  accidental half-second pose doesn't misfire them.
+- **Gaze (look left/right) and air-trackpad turn/scroll direction are best-effort.** Both are
+  computed from raw landmark positions rather than a pre-trained classifier, so their sign
+  (which way is "left") can vary slightly by camera/mirroring setup. If either feels reversed
+  on your device, that's a one-line fix — report which one and which direction is wrong.
 
 ### Install it (no computer needed)
 

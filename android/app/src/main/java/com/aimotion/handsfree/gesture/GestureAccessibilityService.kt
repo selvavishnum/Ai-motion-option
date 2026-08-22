@@ -5,6 +5,7 @@ import android.accessibilityservice.GestureDescription
 import android.content.Context
 import android.content.Intent
 import android.graphics.Path
+import android.os.PowerManager
 import android.util.DisplayMetrics
 import android.util.Log
 import android.view.WindowManager
@@ -50,7 +51,21 @@ class GestureAccessibilityService : AccessibilityService() {
             ActionType.HOME -> performGlobalAction(GLOBAL_ACTION_HOME)
             ActionType.RECENTS -> performGlobalAction(GLOBAL_ACTION_RECENTS)
             ActionType.LAUNCH_APP -> launchApp(action.packageName)
+            ActionType.WAKE_SCREEN -> wakeScreen()
         }
+    }
+
+    /** Briefly wakes the display — a real, legitimate wake lock (the same mechanism alarm and
+     * call apps use), not a hack. There is no matching "turn screen off": Android has no API
+     * for a regular app to do that. */
+    private fun wakeScreen() {
+        val powerManager = getSystemService(Context.POWER_SERVICE) as PowerManager
+        @Suppress("DEPRECATION")
+        val wakeLock = powerManager.newWakeLock(
+            PowerManager.SCREEN_BRIGHT_WAKE_LOCK or PowerManager.ACQUIRE_CAUSES_WAKEUP,
+            "$packageName:gesture-wake",
+        )
+        wakeLock.acquire(3000L) // auto-releases after the timeout — no manual release() needed
     }
 
     /** Simulates a two-finger pinch centered on screen — one increment per call. Driven
