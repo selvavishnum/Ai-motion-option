@@ -147,6 +147,11 @@ class MainActivity : AppCompatActivity() {
             toggles.faceEnabled = checked
             refreshStatus()
         }
+        binding.pointerSwitch.isChecked = toggles.pointerEnabled
+        binding.pointerSwitch.setOnCheckedChangeListener { _, checked ->
+            toggles.pointerEnabled = checked
+            refreshStatus()
+        }
         binding.waveGestureSwitch.isChecked = toggles.waveEnabled
         binding.waveGestureSwitch.setOnCheckedChangeListener { _, checked ->
             toggles.waveEnabled = checked
@@ -253,6 +258,13 @@ class MainActivity : AppCompatActivity() {
         binding.openBatteryButton.isEnabled = !batteryOk
         binding.serviceSwitch.isEnabled = cameraOk && a11yOk
         binding.bubbleSwitch.isEnabled = overlayOk
+        // The pointer draws through the same overlay window as the bubble, so without that
+        // permission the switch would turn on and produce nothing visible.
+        binding.pointerSwitch.isEnabled = overlayOk
+        if (!overlayOk) {
+            binding.pointerHintText.text =
+                "Needs the floating bubble permission above before the pointer can be drawn."
+        }
 
         // Not every phone has a proximity sensor. Say so plainly rather than leaving a switch
         // that silently does nothing.

@@ -30,6 +30,7 @@ import com.aimotion.handsfree.face.classifyGaze
 import com.aimotion.handsfree.face.gazeOffset
 import com.aimotion.handsfree.face.headPoint
 import com.aimotion.handsfree.overlay.OverlayBubbleService
+import com.aimotion.handsfree.overlay.PointerOverlay
 import java.util.concurrent.Executors
 
 private const val TAG = "GestureControlService"
@@ -73,6 +74,20 @@ private const val PINCH_COOLDOWN_MS = 90L
 private const val TRACKPAD_MOVE_THRESHOLD = 0.055f // normalized (0..1) coordinate space
 private const val TRACKPAD_COOLDOWN_MS = 90L
 private const val TRACKPAD_HOLD_FRAMES_FOR_TAP = 4
+
+// Air pointer. Your hand only travels comfortably across the middle of the camera's view, so
+// that band is stretched to cover the whole screen — mapping the full frame would mean reaching
+// far to one side just to touch the edge of the display, and never quite getting to the corners.
+private const val POINTER_ACTIVE_LO = 0.2f
+private const val POINTER_ACTIVE_HI = 0.8f
+
+/** Low-pass factor for the pointer. Landmarks jitter by a few pixels every frame; unsmoothed the
+ * dot visibly buzzes even with a perfectly still hand. */
+private const val POINTER_SMOOTHING = 0.35f
+
+/** How far the fingertip may drift, as a fraction of the screen, and still count as held still
+ * for a tap. */
+private const val POINTER_TAP_TOLERANCE_PX = 28f
 
 // Head movement, as a fraction of the distance between the eyes — so the same real head movement
 // works at any distance from the phone. Roughly a third of an eye-span of travel.
@@ -123,6 +138,14 @@ class GestureControlService : LifecycleService() {
 
     private val headTracker = DirectionalMotionTracker(HEAD_MOVE_THRESHOLD)
     private var lastHeadFiredAtMs = 0L
+
+    private var pointerOverlay: PointerOverlay? = null
+    private var pointerX = -1f
+    private var pointerY = -1f
+    private var pointerAnchorX = 0f
+    private var pointerAnchorY = 0f
+    private var pointerStillFrames = 0
+    private var pointerTapped = false
 
     private var lastFaceFiredAtMs = 0L
     private var candidateFaceGesture: FaceGesture? = null
@@ -206,6 +229,8 @@ class GestureControlService : LifecycleService() {
         runCatching { unregisterReceiver(screenStateReceiver) }
         proximityDetector?.stop()
         proximityDetector = null
+        pointerOverlay?.destroy()
+        pointerOverlay = null
         cameraProvider?.unbindAll()
         cameraBound = false
         // Queued rather than closed inline: the helpers are owned by analysisExecutor (see
@@ -411,6 +436,16 @@ class GestureControlService : LifecycleService() {
             return
         }
         val tip = landmarks[8]
+
+        // Pointer mode replaces swipe mode rather than running alongside it. Both at once would
+        // mean the dot tracking your finger while the page scrolls under it, which reads as the
+        // pointer causing the scroll.
+        if (toggles.pointerEnabled) {
+            handleAirPointer(tip.x(), tip.y())
+            return
+        }
+        hidePointer()
+
         // Fed on every frame, including during the cooldown. That's the point: travel
         // accumulates against an anchor that only moves when something fires, so a movement made
         // while the cooldown was active still counts instead of being discarded.
@@ -477,6 +512,66 @@ class GestureControlService : LifecycleService() {
     private fun resetTrackpad() {
         trackpadTracker.reset()
         trackpadTapped = false
+        hidePointer()
+    }
+
+    /**
+     * Moves the on-screen dot to follow the fingertip, and taps where it sits when the finger
+     * holds still.
+     *
+     * Tapping at the pointer rather than the screen centre is the substantive part: the dot makes
+     * the target visible, so tapping anywhere else would contradict what the user can see.
+     */
+    private fun handleAirPointer(rawX: Float, rawY: Float) {
+        val metrics = resources.displayMetrics
+        val targetX = mapToScreen(rawX, metrics.widthPixels)
+        val targetY = mapToScreen(rawY, metrics.heightPixels)
+
+        if (pointerX < 0f) {
+            pointerX = targetX
+            pointerY = targetY
+            pointerAnchorX = targetX
+            pointerAnchorY = targetY
+            pointerStillFrames = 0
+            pointerTapped = false
+        } else {
+            pointerX += POINTER_SMOOTHING * (targetX - pointerX)
+            pointerY += POINTER_SMOOTHING * (targetY - pointerY)
+        }
+
+        val overlay = pointerOverlay ?: PointerOverlay(this).also { pointerOverlay = it }
+        overlay.moveTo(pointerX.toInt(), pointerY.toInt())
+
+        val drift = kotlin.math.hypot(pointerX - pointerAnchorX, pointerY - pointerAnchorY)
+        if (drift > POINTER_TAP_TOLERANCE_PX) {
+            pointerAnchorX = pointerX
+            pointerAnchorY = pointerY
+            pointerStillFrames = 0
+            pointerTapped = false
+            return
+        }
+
+        pointerStillFrames++
+        if (!pointerTapped && pointerStillFrames >= TRACKPAD_HOLD_FRAMES_FOR_TAP) {
+            pointerTapped = true
+            ActionDispatcher.tapAt(pointerX, pointerY)
+        }
+    }
+
+    /** Stretches the comfortable middle band of the camera view across the full screen axis. */
+    private fun mapToScreen(normalized: Float, sizePx: Int): Float {
+        val t = ((normalized - POINTER_ACTIVE_LO) / (POINTER_ACTIVE_HI - POINTER_ACTIVE_LO))
+            .coerceIn(0f, 1f)
+        return t * sizePx
+    }
+
+    private fun hidePointer() {
+        if (pointerX < 0f && pointerOverlay?.isShowing != true) return
+        pointerX = -1f
+        pointerY = -1f
+        pointerStillFrames = 0
+        pointerTapped = false
+        pointerOverlay?.hide()
     }
 
     private fun handlePinchTracking(result: com.google.mediapipe.tasks.vision.handlandmarker.HandLandmarkerResult) {

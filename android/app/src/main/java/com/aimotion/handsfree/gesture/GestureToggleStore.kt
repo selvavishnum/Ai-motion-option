@@ -22,6 +22,7 @@ class GestureToggleStore(context: Context) {
     @Volatile private var bubbleCache = prefs.getBoolean(KEY_BUBBLE, true)
     @Volatile private var pauseScreenOffCache = prefs.getBoolean(KEY_PAUSE_SCREEN_OFF, true)
     @Volatile private var waveCache = prefs.getBoolean(KEY_WAVE, true)
+    @Volatile private var pointerCache = prefs.getBoolean(KEY_POINTER, false)
 
     // Held in a field on purpose: SharedPreferences keeps listeners weakly, so one with no strong
     // reference is collected and silently stops firing.
@@ -32,6 +33,7 @@ class GestureToggleStore(context: Context) {
             KEY_BUBBLE -> bubbleCache = p.getBoolean(KEY_BUBBLE, true)
             KEY_PAUSE_SCREEN_OFF -> pauseScreenOffCache = p.getBoolean(KEY_PAUSE_SCREEN_OFF, true)
             KEY_WAVE -> waveCache = p.getBoolean(KEY_WAVE, true)
+            KEY_POINTER -> pointerCache = p.getBoolean(KEY_POINTER, false)
             // key is null when preferences are cleared wholesale; re-read everything.
             null -> {
                 handCache = p.getBoolean(KEY_HAND, true)
@@ -39,6 +41,7 @@ class GestureToggleStore(context: Context) {
                 bubbleCache = p.getBoolean(KEY_BUBBLE, true)
                 pauseScreenOffCache = p.getBoolean(KEY_PAUSE_SCREEN_OFF, true)
                 waveCache = p.getBoolean(KEY_WAVE, true)
+                pointerCache = p.getBoolean(KEY_POINTER, false)
             }
         }
     }
@@ -101,11 +104,25 @@ class GestureToggleStore(context: Context) {
             prefs.edit().putBoolean(KEY_WAVE, value).apply()
         }
 
+    /**
+     * Air pointer: a dot on screen follows the pointed finger, and holding still taps where it
+     * sits. Off by default because it *replaces* the finger-swipe behaviour rather than adding to
+     * it — showing a pointer while the page scrolls under it reads as the pointer causing the
+     * scroll. Needs the overlay permission to draw anything.
+     */
+    var pointerEnabled: Boolean
+        get() = pointerCache
+        set(value) {
+            pointerCache = value
+            prefs.edit().putBoolean(KEY_POINTER, value).apply()
+        }
+
     private companion object {
         const val KEY_HAND = "hand_enabled"
         const val KEY_FACE = "face_enabled"
         const val KEY_BUBBLE = "bubble_enabled"
         const val KEY_PAUSE_SCREEN_OFF = "pause_when_screen_off"
         const val KEY_WAVE = "wave_enabled"
+        const val KEY_POINTER = "pointer_enabled"
     }
 }

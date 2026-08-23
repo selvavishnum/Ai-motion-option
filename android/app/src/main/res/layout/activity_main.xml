@@ -136,6 +136,23 @@
             android:textColor="@color/onSurface" />
 
         <com.google.android.material.switchmaterial.SwitchMaterial
+            android:id="@+id/pointerSwitch"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="4dp"
+            android:text="Air pointer (blue dot)"
+            android:textColor="@color/onSurface" />
+
+        <TextView
+            android:id="@+id/pointerHintText"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="2dp"
+            android:text="A blue dot follows your pointed finger, and holding still taps exactly where the dot is. Replaces finger swipe/scroll while it's on. Needs the floating bubble permission."
+            android:textColor="@color/muted"
+            android:textSize="12sp" />
+
+        <com.google.android.material.switchmaterial.SwitchMaterial
             android:id="@+id/waveGestureSwitch"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
