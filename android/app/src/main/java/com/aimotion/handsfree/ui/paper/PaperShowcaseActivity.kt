@@ -65,7 +65,7 @@ fun PaperShowcaseScreen() {
         Spacer(Modifier.height(PaperTheme.spacing.xxl))
 
         // ---- Buttons -------------------------------------------------------------------
-        PaperSectionHeader("Buttons", "One primary per screen. Weight signals priority.")
+        PaperSectionHeader("Buttons", subtitle = "One primary per screen. Weight signals priority.")
         Spacer(Modifier.height(PaperTheme.spacing.lg))
         PaperCard {
             Column(verticalArrangement = Arrangement.spacedBy(PaperTheme.spacing.md)) {
@@ -88,7 +88,7 @@ fun PaperShowcaseScreen() {
         Spacer(Modifier.height(PaperTheme.spacing.xxl))
 
         // ---- Rows ----------------------------------------------------------------------
-        PaperSectionHeader("Rows", "The whole row is the target, not just the switch.")
+        PaperSectionHeader("Rows", subtitle = "The whole row is the target, not just the switch.")
         Spacer(Modifier.height(PaperTheme.spacing.lg))
         PaperCard(contentPadding = PaperTheme.spacing.lg) {
             PaperSwitchRow(
@@ -131,7 +131,7 @@ fun PaperShowcaseScreen() {
         Spacer(Modifier.height(PaperTheme.spacing.xxl))
 
         // ---- States --------------------------------------------------------------------
-        PaperSectionHeader("States", "Tap to switch. Loading, empty and error are first-class.")
+        PaperSectionHeader("States", subtitle = "Tap to switch. Loading, empty and error are first-class.")
         Spacer(Modifier.height(PaperTheme.spacing.lg))
         Row(horizontalArrangement = Arrangement.spacedBy(PaperTheme.spacing.sm)) {
             DemoState.entries.forEach { state ->

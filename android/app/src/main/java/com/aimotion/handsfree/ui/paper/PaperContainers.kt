@@ -79,6 +79,12 @@ fun PaperCard(
  * Marked as a heading for accessibility, which is what lets screen-reader users jump between
  * sections instead of swiping through every row to find where a group starts.
  *
+ * **Pass [subtitle] by name.** Compose convention puts `modifier` immediately after the required
+ * parameters, so `PaperSectionHeader("Rows", "A subtitle")` binds the second string to `modifier`
+ * and fails to compile. Every optional parameter in this system sits after `modifier` for
+ * consistency with the rest of Compose, which means optional arguments are always named —
+ * exactly as `Text(text, modifier, color, …)` requires.
+ *
  * @param title the section name. Keep it to one or two words.
  * @param subtitle optional supporting line. Use it for guidance that would otherwise become a
  *   tooltip nobody reads.
@@ -150,7 +156,7 @@ private fun PaperContainersPreview() {
     PaperTheme(darkTheme = false) {
         PaperScreen {
             Column(verticalArrangement = Arrangement.spacedBy(16.dp), modifier = Modifier.padding(vertical = 24.dp)) {
-                PaperSectionHeader("Detection", "Which sensors are running.")
+                PaperSectionHeader("Detection", subtitle = "Which sensors are running.")
                 PaperCard {
                     Text(
                         "Card content sits on a white surface with a hairline edge.",

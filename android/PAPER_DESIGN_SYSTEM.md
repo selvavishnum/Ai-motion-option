@@ -62,8 +62,12 @@ what lets the same `PaperSwitchRow` back a ViewModel-driven setting in the app a
 
 Conventions applied uniformly, because a system you have to look up is a system nobody uses:
 
-1. **Required args first, `modifier` third.** Standard Compose ordering; `modifier` always applies
-   to the outermost node.
+1. **Required args first, `modifier` next, optional args after.** Standard Compose ordering;
+   `modifier` always applies to the outermost node. The consequence: **every optional argument is
+   passed by name.** `PaperSectionHeader("Rows", "A subtitle")` binds the second string to
+   `modifier` and fails to compile — the same trap `Text(text, modifier, color, …)` has. Worth
+   stating plainly, because the first CI run of this system was red for exactly this reason, in
+   four places.
 2. **Impossible states are unrepresentable.** `loading = true` on a button blocks input by itself —
    a caller cannot forget `enabled = false` and ship a double-submit bug.
 3. **Slots over flags.** `PaperRow(trailing = { ... })` takes a composable, so a chevron, a value,
