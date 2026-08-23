@@ -119,6 +119,14 @@
             android:text="Face gestures"
             android:textColor="@color/onSurface" />
 
+        <com.google.android.material.switchmaterial.SwitchMaterial
+            android:id="@+id/bubbleSwitch"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="4dp"
+            android:text="Show floating blue dot"
+            android:textColor="@color/onSurface" />
+
         <TextView
             android:id="@+id/speedHintText"
             android:layout_width="wrap_content"

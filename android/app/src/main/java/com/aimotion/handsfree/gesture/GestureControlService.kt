@@ -100,8 +100,9 @@ class GestureControlService : LifecycleService() {
         initDetectorsAsync()
         startCamera()
         // Ensure the status bubble is showing whenever gesture control is, not only when
-        // MainActivity happens to be open — a no-op if the overlay permission isn't granted.
-        OverlayBubbleService.start(this)
+        // MainActivity happens to be open — a no-op if the overlay permission isn't granted,
+        // and skipped entirely when the user has hidden the dot.
+        if (toggles.bubbleEnabled) OverlayBubbleService.start(this)
     }
 
     /** Each helper downloads its model file the first time it's constructed — blocking network

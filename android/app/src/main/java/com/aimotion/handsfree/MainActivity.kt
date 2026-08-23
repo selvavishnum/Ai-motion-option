@@ -115,6 +115,11 @@ class MainActivity : AppCompatActivity() {
             toggles.faceEnabled = checked
             refreshStatus()
         }
+        binding.bubbleSwitch.isChecked = toggles.bubbleEnabled
+        binding.bubbleSwitch.setOnCheckedChangeListener { _, checked ->
+            toggles.bubbleEnabled = checked
+            if (checked) OverlayBubbleService.start(this) else OverlayBubbleService.stop(this)
+        }
         binding.serviceSwitch.setOnCheckedChangeListener { _, checked ->
             if (checked) maybeStartService() else GestureControlService.stop(this)
         }
@@ -123,7 +128,11 @@ class MainActivity : AppCompatActivity() {
     override fun onResume() {
         super.onResume()
         refreshStatus()
-        if (Settings.canDrawOverlays(this)) OverlayBubbleService.start(this)
+        if (Settings.canDrawOverlays(this) && toggles.bubbleEnabled) {
+            OverlayBubbleService.start(this)
+        } else {
+            OverlayBubbleService.stop(this)
+        }
     }
 
     private fun hasCameraPermission() =
@@ -194,9 +203,16 @@ class MainActivity : AppCompatActivity() {
             append(if (adminOk) "Screen off: allowed" else "Screen off: not allowed")
         }
         binding.grantCameraButton.isEnabled = !cameraOk
+        // Was missing, unlike every other permission button here: the accessibility button stayed
+        // lit and enabled even once the service was on, which reads as "still not granted" no
+        // matter what the status line says.
+        binding.openAccessibilityButton.isEnabled = !a11yOk
+        binding.openAccessibilityButton.text =
+            if (a11yOk) "Accessibility permission granted ✓" else "Turn on Accessibility permission"
         binding.openOverlayButton.isEnabled = !overlayOk
         binding.openBatteryButton.isEnabled = !batteryOk
         binding.serviceSwitch.isEnabled = cameraOk && a11yOk
+        binding.bubbleSwitch.isEnabled = overlayOk
 
         // Spell out the live speed consequence of the two switches, since it isn't obvious that
         // turning one modality off makes the other one react faster.

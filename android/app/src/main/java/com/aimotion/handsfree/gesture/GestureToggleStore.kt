@@ -18,8 +18,16 @@ class GestureToggleStore(context: Context) {
         get() = prefs.getBoolean(KEY_FACE, true)
         set(value) = prefs.edit().putBoolean(KEY_FACE, value).apply()
 
+    /** Whether to show the floating status dot over other apps. Separate from the overlay
+     * permission itself, so hiding the dot doesn't mean revoking a permission the user may want
+     * to keep granted. */
+    var bubbleEnabled: Boolean
+        get() = prefs.getBoolean(KEY_BUBBLE, true)
+        set(value) = prefs.edit().putBoolean(KEY_BUBBLE, value).apply()
+
     private companion object {
         const val KEY_HAND = "hand_enabled"
         const val KEY_FACE = "face_enabled"
+        const val KEY_BUBBLE = "bubble_enabled"
     }
 }
