@@ -56,6 +56,10 @@
             android:name=".ui.paper.PaperShowcaseActivity"
             android:exported="false" />
 
+        <activity
+            android:name=".SensorListActivity"
+            android:exported="false" />
+
         <service
             android:name=".gesture.GestureControlService"
             android:foregroundServiceType="camera"

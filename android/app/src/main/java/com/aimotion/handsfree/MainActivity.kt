@@ -115,6 +115,9 @@ class MainActivity : AppCompatActivity() {
         binding.gestureMappingComposeButton.setOnClickListener {
             startActivity(Intent(this, GestureMappingComposeActivity::class.java))
         }
+        binding.sensorListButton.setOnClickListener {
+            startActivity(Intent(this, SensorListActivity::class.java))
+        }
         binding.paperShowcaseButton.setOnClickListener {
             startActivity(Intent(this, PaperShowcaseActivity::class.java))
         }
