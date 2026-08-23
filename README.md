@@ -290,6 +290,13 @@ spyware to an automated scanner, even though this is exactly what a gesture-cont
 To install anyway: **Play Store → profile icon → Play Protect → gear icon → turn off "Scan
 apps with Play Protect"**, install, then turn scanning back on.
 
+### Signing key
+
+Release builds are signed with a key held in GitHub Actions secrets, never in this repository —
+see [docs/SIGNING.md](docs/SIGNING.md) for the one-time setup. Until those secrets exist, CI
+produces `app-release-unsigned.apk`, which a phone cannot install; use `app-debug.apk` for
+sideloading in the meantime.
+
 ### Build it yourself
 
 ```bash
