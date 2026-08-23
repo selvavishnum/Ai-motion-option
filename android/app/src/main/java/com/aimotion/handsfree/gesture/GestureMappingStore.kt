@@ -1,6 +1,7 @@
 package com.aimotion.handsfree.gesture
 
 import android.content.Context
+import android.content.SharedPreferences
 import org.json.JSONObject
 
 /** Gestures that appear in the remappable mapping table/UI. [Gesture.UNKNOWN] is a
@@ -13,7 +14,26 @@ val MAPPABLE_GESTURES: List<Gesture> = Gesture.entries.filter { it != Gesture.UN
 class GestureMappingStore(context: Context) {
     private val prefs = context.getSharedPreferences("gesture_mapping", Context.MODE_PRIVATE)
 
-    fun load(): Map<Gesture, GestureAction> {
+    // load() is called on every gesture that fires, from the detection callback thread, and used
+    // to re-parse the JSON and rebuild the map each time. The parsed result is cached and
+    // dropped whenever the file changes, so edits in Settings still take effect immediately
+    // while the hot path costs a single volatile read.
+    @Volatile
+    private var cached: Map<Gesture, GestureAction>? = null
+
+    // Held in a field on purpose: SharedPreferences keeps listeners weakly, so a listener with no
+    // strong reference is collected and silently stops firing.
+    private val invalidate = SharedPreferences.OnSharedPreferenceChangeListener { _, _ ->
+        cached = null
+    }
+
+    init {
+        prefs.registerOnSharedPreferenceChangeListener(invalidate)
+    }
+
+    fun load(): Map<Gesture, GestureAction> = cached ?: parse().also { cached = it }
+
+    private fun parse(): Map<Gesture, GestureAction> {
         val raw = prefs.getString(KEY, null) ?: return DEFAULT_MAPPING
         return try {
             val json = JSONObject(raw)
@@ -31,6 +51,10 @@ class GestureMappingStore(context: Context) {
     }
 
     fun save(mapping: Map<Gesture, GestureAction>) {
+        // Also invalidated directly rather than relying only on the listener: apply() writes
+        // asynchronously and the callback lands on the main thread later, so a read in between
+        // would otherwise serve the stale mapping.
+        cached = null
         val json = JSONObject()
         for ((gesture, action) in mapping) {
             val entry = JSONObject()

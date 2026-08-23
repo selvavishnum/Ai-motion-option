@@ -1,6 +1,8 @@
 package com.aimotion.handsfree
 
 import android.Manifest
+import android.app.admin.DevicePolicyManager
+import android.content.ComponentName
 import android.content.Context
 import android.content.Intent
 import android.content.pm.PackageManager
@@ -21,8 +23,11 @@ import com.aimotion.handsfree.gesture.Gesture
 import com.aimotion.handsfree.gesture.GestureAction
 import com.aimotion.handsfree.gesture.GestureControlService
 import com.aimotion.handsfree.gesture.GestureMappingStore
+import com.aimotion.handsfree.gesture.GestureToggleStore
+import com.aimotion.handsfree.gesture.AirSensorDeviceAdminReceiver
 import com.aimotion.handsfree.gesture.MAPPABLE_GESTURES
 import com.aimotion.handsfree.overlay.OverlayBubbleService
+import com.aimotion.handsfree.ui.paper.PaperShowcaseActivity
 
 class MainActivity : AppCompatActivity() {
 
@@ -31,6 +36,7 @@ class MainActivity : AppCompatActivity() {
     private lateinit var mapping: MutableMap<Gesture, GestureAction>
     private lateinit var faceMappingStore: FaceMappingStore
     private lateinit var faceMapping: MutableMap<FaceGesture, GestureAction>
+    private lateinit var toggles: GestureToggleStore
 
     private val requestCamera = registerForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
         refreshStatus()
@@ -46,6 +52,7 @@ class MainActivity : AppCompatActivity() {
         mapping = mappingStore.load().toMutableMap()
         faceMappingStore = FaceMappingStore(this)
         faceMapping = faceMappingStore.load().toMutableMap()
+        toggles = GestureToggleStore(this)
 
         binding.mappingList.layoutManager = LinearLayoutManager(this)
         binding.mappingList.adapter = GestureMappingAdapter(
@@ -83,6 +90,9 @@ class MainActivity : AppCompatActivity() {
         binding.gestureMappingComposeButton.setOnClickListener {
             startActivity(Intent(this, GestureMappingComposeActivity::class.java))
         }
+        binding.paperShowcaseButton.setOnClickListener {
+            startActivity(Intent(this, PaperShowcaseActivity::class.java))
+        }
         binding.grantCameraButton.setOnClickListener {
             requestCamera.launch(Manifest.permission.CAMERA)
         }
@@ -97,6 +107,23 @@ class MainActivity : AppCompatActivity() {
             startActivity(Intent(Settings.ACTION_REQUEST_IGNORE_BATTERY_OPTIMIZATIONS, Uri.parse("package:$packageName")))
         }
         binding.restrictedSettingsButton.setOnClickListener { showRestrictedSettingsHelp() }
+        binding.deviceAdminButton.setOnClickListener { requestDeviceAdmin() }
+
+        binding.handGestureSwitch.isChecked = toggles.handEnabled
+        binding.faceGestureSwitch.isChecked = toggles.faceEnabled
+        binding.handGestureSwitch.setOnCheckedChangeListener { _, checked ->
+            toggles.handEnabled = checked
+            refreshStatus()
+        }
+        binding.faceGestureSwitch.setOnCheckedChangeListener { _, checked ->
+            toggles.faceEnabled = checked
+            refreshStatus()
+        }
+        binding.bubbleSwitch.isChecked = toggles.bubbleEnabled
+        binding.bubbleSwitch.setOnCheckedChangeListener { _, checked ->
+            toggles.bubbleEnabled = checked
+            if (checked) OverlayBubbleService.start(this) else OverlayBubbleService.stop(this)
+        }
         binding.serviceSwitch.setOnCheckedChangeListener { _, checked ->
             if (checked) maybeStartService() else GestureControlService.stop(this)
         }
@@ -105,7 +132,11 @@ class MainActivity : AppCompatActivity() {
     override fun onResume() {
         super.onResume()
         refreshStatus()
-        if (Settings.canDrawOverlays(this)) OverlayBubbleService.start(this)
+        if (Settings.canDrawOverlays(this) && toggles.bubbleEnabled) {
+            OverlayBubbleService.start(this)
+        } else {
+            OverlayBubbleService.stop(this)
+        }
     }
 
     private fun hasCameraPermission() =
@@ -122,12 +153,47 @@ class MainActivity : AppCompatActivity() {
         return false
     }
 
+    private fun deviceAdminComponent() = ComponentName(this, AirSensorDeviceAdminReceiver::class.java)
+
+    private fun isDeviceAdminActive(): Boolean =
+        (getSystemService(Context.DEVICE_POLICY_SERVICE) as DevicePolicyManager)
+            .isAdminActive(deviceAdminComponent())
+
+    /** The only way an ordinary app can turn the screen off is as a force-lock device admin, so
+     * the "screen off" gesture needs this separate grant. The explanation is spelled out because
+     * the system dialog that follows is deliberately alarming, and the user deserves to know it
+     * is being asked for exactly one capability. */
+    private fun requestDeviceAdmin() {
+        if (isDeviceAdminActive()) {
+            android.app.AlertDialog.Builder(this)
+                .setTitle("Screen off is already allowed")
+                .setMessage(
+                    "Air Sensor is an active device admin, so the \"screen off\" gesture works.\n\n" +
+                        "To undo it: Settings → Security → Device admin apps → Air Sensor → Deactivate. " +
+                        "Everything else keeps working without it."
+                )
+                .setPositiveButton("OK", null)
+                .show()
+            return
+        }
+
+        val intent = Intent(DevicePolicyManager.ACTION_ADD_DEVICE_ADMIN)
+            .putExtra(DevicePolicyManager.EXTRA_DEVICE_ADMIN, deviceAdminComponent())
+            .putExtra(
+                DevicePolicyManager.EXTRA_ADD_EXPLANATION,
+                "Lets the closed-palm gesture turn the screen off. This is the only device-admin " +
+                    "power Air Sensor asks for — it cannot wipe your data or set passwords.",
+            )
+        startActivity(intent)
+    }
+
     private fun refreshStatus() {
         val cameraOk = hasCameraPermission()
         val a11yOk = isAccessibilityServiceEnabled()
         val overlayOk = Settings.canDrawOverlays(this)
         val batteryOk = (getSystemService(Context.POWER_SERVICE) as PowerManager)
             .isIgnoringBatteryOptimizations(packageName)
+        val adminOk = isDeviceAdminActive()
 
         binding.statusText.text = buildString {
             append(if (cameraOk) "Camera: granted" else "Camera: not granted")
@@ -137,11 +203,33 @@ class MainActivity : AppCompatActivity() {
             append(if (overlayOk) "Overlay: on" else "Overlay: off")
             append(" · ")
             append(if (batteryOk) "Battery: unrestricted" else "Battery: restricted")
+            append(" · ")
+            append(if (adminOk) "Screen off: allowed" else "Screen off: not allowed")
         }
         binding.grantCameraButton.isEnabled = !cameraOk
+        // Was missing, unlike every other permission button here: the accessibility button stayed
+        // lit and enabled even once the service was on, which reads as "still not granted" no
+        // matter what the status line says.
+        binding.openAccessibilityButton.isEnabled = !a11yOk
+        binding.openAccessibilityButton.text =
+            if (a11yOk) "Accessibility permission granted ✓" else "Turn on Accessibility permission"
         binding.openOverlayButton.isEnabled = !overlayOk
         binding.openBatteryButton.isEnabled = !batteryOk
         binding.serviceSwitch.isEnabled = cameraOk && a11yOk
+        binding.bubbleSwitch.isEnabled = overlayOk
+
+        // Spell out the live speed consequence of the two switches, since it isn't obvious that
+        // turning one modality off makes the other one react faster.
+        binding.speedHintText.text = when {
+            toggles.handEnabled && toggles.faceEnabled ->
+                "Both on: hand and face take turns on each camera frame. Switch off the one you don't use and the other reacts about twice as fast."
+            toggles.handEnabled ->
+                "Hand only: every camera frame goes to hand detection — fastest air-gesture response."
+            toggles.faceEnabled ->
+                "Face only: every camera frame goes to face detection — fastest face-gesture response."
+            else ->
+                "Both off — nothing will be detected. Turn at least one on."
+        }
     }
 
     private fun maybeStartService() {

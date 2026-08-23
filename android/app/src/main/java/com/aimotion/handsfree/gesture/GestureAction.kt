@@ -8,11 +8,14 @@ enum class ActionType {
      * UI is available, same as swiping up-and-hold on stock Android gesture navigation. */
     RECENTS,
 
-    /** Briefly wakes the display (a real, legitimate wake-lock, same mechanism alarm apps use).
-     * There is no counterpart action that turns the screen off: Android has no API for a
-     * regular app to do that — only a Device Admin app can lock the screen, and that requires
-     * a much heavier "Activate device administrator" permission most users would decline. */
+    /** Briefly wakes the display (a real, legitimate wake-lock, same mechanism alarm apps use). */
     WAKE_SCREEN,
+
+    /** Turns the screen off, via DevicePolicyManager.lockNow(). Android gives an ordinary app no
+     * API for this, so it needs the separate "Activate device admin" grant (force-lock only —
+     * see AirSensorDeviceAdminReceiver). Without that grant this action does nothing, so the
+     * app surfaces a button to turn it on rather than failing silently. */
+    LOCK_SCREEN,
 }
 
 data class GestureAction(val type: ActionType, val packageName: String? = null) {
@@ -28,7 +31,7 @@ data class GestureAction(val type: ActionType, val packageName: String? = null) 
  * remappable table — see GestureControlService's finger-trackpad tracking. */
 val DEFAULT_MAPPING: Map<Gesture, GestureAction> = mapOf(
     Gesture.OPEN_PALM to GestureAction(ActionType.WAKE_SCREEN),
-    Gesture.FIST to GestureAction(ActionType.HOME),
+    Gesture.FIST to GestureAction(ActionType.LOCK_SCREEN),
     Gesture.PEACE to GestureAction(ActionType.SWIPE_RIGHT),
     Gesture.THUMBS_UP to GestureAction(ActionType.SWIPE_UP),
     Gesture.THUMBS_DOWN to GestureAction(ActionType.SWIPE_DOWN),

@@ -5,6 +5,7 @@ import android.graphics.Bitmap
 import android.util.Log
 import com.google.mediapipe.framework.image.BitmapImageBuilder
 import com.google.mediapipe.tasks.core.BaseOptions
+import com.google.mediapipe.tasks.core.Delegate
 import com.google.mediapipe.tasks.vision.core.RunningMode
 import com.google.mediapipe.tasks.vision.facelandmarker.FaceLandmarker
 import com.google.mediapipe.tasks.vision.facelandmarker.FaceLandmarkerResult
@@ -21,27 +22,43 @@ private const val MODEL_FILE_NAME = "face_landmarker.task"
 class FaceLandmarkerHelper(
     context: Context,
     private val onResult: (FaceLandmarkerResult) -> Unit,
-) {
+) : com.aimotion.handsfree.gesture.FrameDetector {
     private val landmarker: FaceLandmarker
 
     init {
         val modelFile = ensureModel(context)
-        val options = FaceLandmarker.FaceLandmarkerOptions.builder()
-            .setBaseOptions(BaseOptions.builder().setModelAssetPath(modelFile.absolutePath).build())
+
+        fun build(delegate: Delegate) = FaceLandmarker.FaceLandmarkerOptions.builder()
+            .setBaseOptions(
+                BaseOptions.builder()
+                    .setModelAssetPath(modelFile.absolutePath)
+                    .setDelegate(delegate)
+                    .build()
+            )
             .setRunningMode(RunningMode.LIVE_STREAM)
             .setNumFaces(1)
             .setOutputFaceBlendshapes(true)
+            .setMinFaceDetectionConfidence(0.5f)
+            .setMinFacePresenceConfidence(0.5f)
+            .setMinTrackingConfidence(0.5f)
             .setResultListener { result, _ -> onResult(result) }
             .setErrorListener { e -> Log.e(TAG, "detect error", e) }
             .build()
-        landmarker = FaceLandmarker.createFromOptions(context, options)
+
+        // See HandLandmarkerHelper: GPU where available, CPU where the delegate won't start.
+        landmarker = try {
+            FaceLandmarker.createFromOptions(context, build(Delegate.GPU))
+        } catch (e: Throwable) {
+            Log.w(TAG, "GPU delegate unavailable, falling back to CPU", e)
+            FaceLandmarker.createFromOptions(context, build(Delegate.CPU))
+        }
     }
 
-    fun detectAsync(bitmap: Bitmap, timestampMs: Long) {
+    override fun detectAsync(bitmap: Bitmap, timestampMs: Long) {
         landmarker.detectAsync(BitmapImageBuilder(bitmap).build(), timestampMs)
     }
 
-    fun close() = landmarker.close()
+    override fun close() = landmarker.close()
 
     companion object {
         private fun ensureModel(context: Context): File {
@@ -58,10 +75,56 @@ class FaceLandmarkerHelper(
 }
 
 /** Blendshape category name -> score (0..1) for the first detected face, or null if no face /
- * blendshapes weren't produced. */
+ * blendshapes weren't produced. Convenient for inspection and tests; the frame loop uses
+ * [faceSignals], which avoids building the map at all. */
 fun FaceLandmarkerResult.blendshapeMap(): Map<String, Float>? {
     val shapes = faceBlendshapes().orElse(null)?.firstOrNull() ?: return null
     return shapes.associate { it.categoryName() to it.score() }
+}
+
+/**
+ * The six blendshape scores the classifier actually consults, gathered in one pass.
+ *
+ * MediaPipe emits **52** blendshape categories per face. [blendshapeMap] turned all of them into
+ * a `Map` — 52 `Pair`s plus a `LinkedHashMap` — every frame, so that [classifyFaceGesture] could
+ * look up six keys and ignore the rest. This walks the list once and keeps only what's used,
+ * trading that per-frame map for a single small object.
+ */
+fun FaceLandmarkerResult.faceSignals(): FaceSignals? {
+    val shapes = faceBlendshapes().orElse(null)?.firstOrNull() ?: return null
+
+    var leftBlink = 0f
+    var rightBlink = 0f
+    var browUpLeft = 0f
+    var browUpRight = 0f
+    var browDownLeft = 0f
+    var browDownRight = 0f
+    var mouthOpen = 0f
+    var smileLeft = 0f
+    var smileRight = 0f
+
+    for (category in shapes) {
+        when (category.categoryName()) {
+            "eyeBlinkLeft" -> leftBlink = category.score()
+            "eyeBlinkRight" -> rightBlink = category.score()
+            "browOuterUpLeft" -> browUpLeft = category.score()
+            "browOuterUpRight" -> browUpRight = category.score()
+            "browDownLeft" -> browDownLeft = category.score()
+            "browDownRight" -> browDownRight = category.score()
+            "jawOpen" -> mouthOpen = category.score()
+            "mouthSmileLeft" -> smileLeft = category.score()
+            "mouthSmileRight" -> smileRight = category.score()
+        }
+    }
+
+    return FaceSignals(
+        leftBlink = leftBlink,
+        rightBlink = rightBlink,
+        browsUp = (browUpLeft + browUpRight) / 2f,
+        browsDown = (browDownLeft + browDownRight) / 2f,
+        mouthOpen = mouthOpen,
+        smile = (smileLeft + smileRight) / 2f,
+    )
 }
 
 // Standard MediaPipe Face Landmarker topology indices (478-point mesh, iris included).

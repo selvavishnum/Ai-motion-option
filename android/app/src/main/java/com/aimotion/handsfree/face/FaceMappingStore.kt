@@ -1,6 +1,7 @@
 package com.aimotion.handsfree.face
 
 import android.content.Context
+import android.content.SharedPreferences
 import com.aimotion.handsfree.gesture.ActionType
 import com.aimotion.handsfree.gesture.GestureAction
 import org.json.JSONObject
@@ -10,7 +11,23 @@ import org.json.JSONObject
 class FaceMappingStore(context: Context) {
     private val prefs = context.getSharedPreferences("face_mapping", Context.MODE_PRIVATE)
 
-    fun load(): Map<FaceGesture, GestureAction> {
+    // See GestureMappingStore: load() runs on every fired gesture from the detection callback
+    // thread, so the parsed map is cached and dropped when the file changes.
+    @Volatile
+    private var cached: Map<FaceGesture, GestureAction>? = null
+
+    // Strong reference required — SharedPreferences holds listeners weakly.
+    private val invalidate = SharedPreferences.OnSharedPreferenceChangeListener { _, _ ->
+        cached = null
+    }
+
+    init {
+        prefs.registerOnSharedPreferenceChangeListener(invalidate)
+    }
+
+    fun load(): Map<FaceGesture, GestureAction> = cached ?: parse().also { cached = it }
+
+    private fun parse(): Map<FaceGesture, GestureAction> {
         val raw = prefs.getString(KEY, null) ?: return DEFAULT_FACE_MAPPING
         return try {
             val json = JSONObject(raw)
@@ -28,6 +45,7 @@ class FaceMappingStore(context: Context) {
     }
 
     fun save(mapping: Map<FaceGesture, GestureAction>) {
+        cached = null
         val json = JSONObject()
         for ((gesture, action) in mapping) {
             val entry = JSONObject()

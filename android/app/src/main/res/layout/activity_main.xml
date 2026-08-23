@@ -35,6 +35,14 @@
             android:layout_marginTop="8dp"
             android:text="Gesture mapping (new UI, beta)" />
 
+        <Button
+            android:id="@+id/paperShowcaseButton"
+            style="@style/Widget.MaterialComponents.Button.OutlinedButton"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="8dp"
+            android:text="Paper design system" />
+
         <TextView
             android:id="@+id/statusText"
             android:layout_width="wrap_content"
@@ -73,6 +81,13 @@
             android:text="Ignore battery optimization (recommended)" />
 
         <Button
+            android:id="@+id/deviceAdminButton"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="8dp"
+            android:text="Allow screen off (device admin)" />
+
+        <Button
             android:id="@+id/restrictedSettingsButton"
             style="@style/Widget.MaterialComponents.Button.OutlinedButton"
             android:layout_width="match_parent"
@@ -95,6 +110,39 @@
             android:layout_marginTop="20dp"
             android:text="Gesture control running"
             android:textColor="@color/onSurface" />
+
+        <com.google.android.material.switchmaterial.SwitchMaterial
+            android:id="@+id/handGestureSwitch"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="12dp"
+            android:text="Air (hand) gestures"
+            android:textColor="@color/onSurface" />
+
+        <com.google.android.material.switchmaterial.SwitchMaterial
+            android:id="@+id/faceGestureSwitch"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="4dp"
+            android:text="Face gestures"
+            android:textColor="@color/onSurface" />
+
+        <com.google.android.material.switchmaterial.SwitchMaterial
+            android:id="@+id/bubbleSwitch"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="4dp"
+            android:text="Show floating blue dot"
+            android:textColor="@color/onSurface" />
+
+        <TextView
+            android:id="@+id/speedHintText"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="4dp"
+            android:text="Tip: the camera has a fixed number of frames per second to share. With both on they take turns, so switching off the one you don't use makes the other about twice as fast to react."
+            android:textColor="@color/muted"
+            android:textSize="12sp" />
 
         <TextView
             android:layout_width="wrap_content"
