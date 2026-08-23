@@ -3,51 +3,39 @@ plugins {
     id("org.jetbrains.kotlin.android")
 }
 
-// Deliberately public — see the signingConfigs comment below. Named so that nobody has to
-// wonder whether a bare string literal in a build file was an accident.
-val COMMITTED_KEYSTORE_PASSWORD = "airsensor"
-
 android {
     namespace = "com.aimotion.handsfree"
-    compileSdk = 34
+    compileSdk = 35
 
     defaultConfig {
         applicationId = "com.aimotion.handsfree"
         minSdk = 31 // Android 12+, per requirements
-        targetSdk = 34
-        versionCode = 2
-        versionName = "0.2.0"
+        // Play refuses new uploads below API 35, and rejects an app that targets an older
+        // platform than the one it is tested against.
+        targetSdk = 35
+        versionCode = 3
+        versionName = "0.3.0"
     }
 
     signingConfigs {
-        // Release builds need a real (non-debug) signature — some OEM skins (ColorOS/Realme UI,
-        // MIUI, ...) reject sideloaded apps signed with the auto-generated debug key.
+        // The signing key lives entirely outside this repository, supplied through environment
+        // variables that CI fills from GitHub Actions secrets. A keystore used to be committed
+        // here, with its password in this file — a defensible trade for a personally sideloaded
+        // app, and an unacceptable one for anything published: whoever holds the key can sign an
+        // update that every installed copy accepts as genuine, and a key in a public repo is held
+        // by everyone.
         //
-        // The keystore is committed, and its password is in this file on purpose. CI used to
-        // generate a throwaway key per build, which meant every APK was signed differently and
-        // Android refused to install one over another: updating required uninstalling first,
-        // which wipes every saved gesture mapping. A stable key is what makes an update an
-        // update.
-        //
-        // This is NOT a secret and must not be treated as one. Anyone with the repo can sign an
-        // APK that Android will accept as an update to this app, so the trade is only reasonable
-        // because this is a personally sideloaded app that is not distributed through any store.
-        // Publishing it anywhere real means generating a private key, keeping it out of the repo,
-        // and supplying it through the RELEASE_KEYSTORE_* environment variables below.
+        // Set RELEASE_KEYSTORE_BASE64, RELEASE_KEYSTORE_PASSWORD, RELEASE_KEY_ALIAS and
+        // RELEASE_KEY_PASSWORD as repository secrets; the workflow decodes the keystore to a file
+        // and passes its path as RELEASE_KEYSTORE_PATH. Without them a release build is unsigned
+        // rather than signed with a key that isn't really yours — see the null check below.
         create("release") {
-            // Environment variables win when set, so a private key can be supplied by CI later
-            // without touching this file.
             val keystorePath = System.getenv("RELEASE_KEYSTORE_PATH")
             if (keystorePath != null) {
                 storeFile = file(keystorePath)
                 storePassword = System.getenv("RELEASE_KEYSTORE_PASSWORD")
                 keyAlias = System.getenv("RELEASE_KEY_ALIAS")
                 keyPassword = System.getenv("RELEASE_KEY_PASSWORD")
-            } else {
-                storeFile = file("airsensor-release.keystore")
-                storePassword = COMMITTED_KEYSTORE_PASSWORD
-                keyAlias = "airsensor"
-                keyPassword = COMMITTED_KEYSTORE_PASSWORD
             }
         }
     }
@@ -55,7 +43,11 @@ android {
     buildTypes {
         release {
             isMinifyEnabled = false
+            // Only attached when a key was actually supplied. Leaving the config attached with no
+            // storeFile fails the build outright, which would mean nobody could produce a local
+            // release build without the private key — including to check that it compiles.
             signingConfig = signingConfigs.getByName("release")
+                .takeIf { System.getenv("RELEASE_KEYSTORE_PATH") != null }
         }
     }
 
@@ -71,6 +63,12 @@ android {
     buildFeatures {
         viewBinding = true
         compose = true
+    }
+
+    // Play requires an app bundle, not an APK, and the bundle is what Play Console accepts —
+    // `./gradlew bundleRelease` produces app/build/outputs/bundle/release/app-release.aab.
+    bundle {
+        language { enableSplit = false } // per-language splits break in-app language switching
     }
 
     composeOptions {
@@ -91,7 +89,11 @@ dependencies {
     implementation("androidx.camera:camera-camera2:1.3.4")
     implementation("androidx.camera:camera-lifecycle:1.3.4")
 
-    implementation("com.google.mediapipe:tasks-vision:0.10.14")
+    // Play requires 16 KB page-size support for apps targeting Android 15, which means native
+    // libraries aligned for it — 0.10.14's .so files are not. This is the one dependency whose
+    // upgrade needs on-device verification rather than just a green build: hand and face
+    // detection accuracy come from it.
+    implementation("com.google.mediapipe:tasks-vision:0.10.21")
 
     // Jetpack Compose, for the production-grade gesture-mapping component system
     // (ui/mapping/). BOM pins all Compose artifact versions together.

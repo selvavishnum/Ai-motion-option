@@ -17,6 +17,9 @@ import com.aimotion.handsfree.gesture.ActionType
 import com.aimotion.handsfree.gesture.Gesture
 import com.aimotion.handsfree.gesture.GestureAction
 import com.aimotion.handsfree.gesture.GestureMappingStore
+import com.aimotion.handsfree.gesture.MAPPABLE_GESTURES
+import com.aimotion.handsfree.gesture.ProximityGesture
+import com.aimotion.handsfree.gesture.ProximityMappingStore
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -34,6 +37,7 @@ private val FACE_EMOJI = mapOf(
     "gaze_left" to "👈", "gaze_right" to "👉",
     "head_left" to "⬅️", "head_right" to "➡️", "head_up" to "⬆️", "head_down" to "⬇️",
 )
+private val WAVE_EMOJI = mapOf("wave_once" to "👋", "wave_twice" to "🙌")
 
 private fun String.toTitleLabel() = replace('_', ' ').replaceFirstChar { it.uppercase() }
 
@@ -41,8 +45,8 @@ private fun String.toTitleLabel() = replace('_', ' ').replaceFirstChar { it.uppe
  * follow-up "choose app" step, so it reads best as the final, more-involved option. */
 val ALL_ACTION_OPTIONS: List<ActionType> = ActionType.entries.sortedBy { it == ActionType.LAUNCH_APP }
 
-/** Backs the gesture-mapping screen. Owns loading/saving both the hand- and face-gesture
- * mapping stores, and exposes a single [MappingUiState] so the UI never has to reconcile two
+/** Backs the gesture-mapping screen. Owns loading/saving all three trigger stores — hand, face
+ * and wave, and exposes a single [MappingUiState] so the UI never has to reconcile two
  * independent loading flows itself. Reads/writes run on [Dispatchers.IO] even though the
  * current SharedPreferences-backed stores are fast, so swapping in a slower persistence layer
  * (e.g. a remote-synced store) later needs no UI-layer changes. */
@@ -50,9 +54,11 @@ class GestureMappingViewModel(application: Application) : AndroidViewModel(appli
 
     private val handStore = GestureMappingStore(application)
     private val faceStore = FaceMappingStore(application)
+    private val waveStore = ProximityMappingStore(application)
 
     private var handMapping: MutableMap<Gesture, GestureAction> = mutableMapOf()
     private var faceMapping: MutableMap<FaceGesture, GestureAction> = mutableMapOf()
+    private var waveMapping: MutableMap<ProximityGesture, GestureAction> = mutableMapOf()
 
     private val _uiState = MutableStateFlow<MappingUiState>(MappingUiState.Loading)
     val uiState: StateFlow<MappingUiState> = _uiState.asStateFlow()
@@ -65,11 +71,11 @@ class GestureMappingViewModel(application: Application) : AndroidViewModel(appli
         viewModelScope.launch {
             _uiState.value = MappingUiState.Loading
             try {
-                val (hand, face) = withContext(Dispatchers.IO) {
-                    handStore.load().toMutableMap() to faceStore.load().toMutableMap()
+                withContext(Dispatchers.IO) {
+                    handMapping = handStore.load().toMutableMap()
+                    faceMapping = faceStore.load().toMutableMap()
+                    waveMapping = waveStore.load().toMutableMap()
                 }
-                handMapping = hand
-                faceMapping = face
                 publish()
             } catch (e: Exception) {
                 _uiState.value = MappingUiState.Error(
@@ -91,10 +97,20 @@ class GestureMappingViewModel(application: Application) : AndroidViewModel(appli
         viewModelScope.launch(Dispatchers.IO) { faceStore.save(faceMapping) }
     }
 
+    fun setWaveAction(gesture: ProximityGesture, action: GestureAction) {
+        waveMapping = waveMapping.toMutableMap().apply { put(gesture, action) }
+        publish()
+        viewModelScope.launch(Dispatchers.IO) { waveStore.save(waveMapping) }
+    }
+
     private fun publish() {
         _uiState.value = MappingUiState.Content(
             handItems = handMapping.entries
-                .filter { it.key != Gesture.UNKNOWN }
+                // POINT drives the continuous air trackpad rather than one fixed action, and
+                // UNKNOWN is a classification fallback; MAPPABLE_GESTURES is the single list that
+                // decides which triggers are remappable, so this screen defers to it instead of
+                // keeping its own idea.
+                .filter { it.key in MAPPABLE_GESTURES }
                 .sortedBy { it.key.name }
                 .map { (gesture, action) ->
                     MappingItem(
@@ -114,6 +130,16 @@ class GestureMappingViewModel(application: Application) : AndroidViewModel(appli
                         action = action,
                     )
                 },
+            waveItems = waveMapping.entries
+                .sortedBy { it.key.name }
+                .map { (gesture, action) ->
+                    MappingItem(
+                        id = "wave_${gesture.name}",
+                        emoji = WAVE_EMOJI[gesture.label] ?: "👋",
+                        label = gesture.label.toTitleLabel(),
+                        action = action,
+                    )
+                },
         )
     }
 
@@ -127,6 +153,9 @@ class GestureMappingViewModel(application: Application) : AndroidViewModel(appli
         } else if (itemId.startsWith("face_")) {
             val name = itemId.removePrefix("face_")
             FaceGesture.entries.firstOrNull { it.name == name }?.let { setFaceAction(it, newAction) }
+        } else if (itemId.startsWith("wave_")) {
+            val name = itemId.removePrefix("wave_")
+            ProximityGesture.entries.firstOrNull { it.name == name }?.let { setWaveAction(it, newAction) }
         }
     }
 

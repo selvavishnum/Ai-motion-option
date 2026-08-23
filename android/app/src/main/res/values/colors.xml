@@ -1,7 +1,27 @@
 <resources>
-    <color name="brand">#3D6BFF</color>
-    <color name="background">#0B0C10</color>
-    <color name="surface">#16171D</color>
-    <color name="onSurface">#E8E8EC</color>
-    <color name="muted">#9A9AA2</color>
+    <!--
+      Minimalist paper-white palette. One accent, one ink, three greys — a small palette is what
+      makes a plain layout read as deliberate rather than unfinished.
+
+      Pure #FFFFFF for the page: "off-white" is the safer default in general, but here the app is
+      mostly white space and a tinted page makes the white cards floating on it look dirty. The
+      separation comes from hairline borders instead of from a background/surface contrast.
+    -->
+    <color name="background">#FFFFFF</color>
+    <color name="surface">#FFFFFF</color>
+    <!-- Section wells and pressed states: the lightest step that is still visible on white. -->
+    <color name="surfaceSunken">#F6F7F9</color>
+    <!-- Hairline borders do the structural work a darker surface would otherwise do. -->
+    <color name="outline">#E4E6EB</color>
+
+    <!-- Near-black rather than #000: pure black on pure white is harsh at text sizes. 15.9:1 on
+         white, comfortably past WCAG AAA. -->
+    <color name="onSurface">#16181D</color>
+    <!-- Secondary text. 4.8:1 on white — passes AA for body text, not only for large text. -->
+    <color name="muted">#6B7280</color>
+
+    <color name="brand">#2563EB</color>
+    <color name="brandPressed">#1D4ED8</color>
+    <color name="onBrand">#FFFFFF</color>
+    <color name="danger">#B3261E</color>
 </resources>

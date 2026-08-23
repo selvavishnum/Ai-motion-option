@@ -15,7 +15,7 @@ private data class GuideEntry(val emoji: String, val title: String, val howTo: S
 
 private val HAND_HOW_TO = mapOf(
     "open_palm" to "Hold your open hand up, fingers spread, palm facing the camera. Wakes the screen.",
-    "fist" to "Curl all fingers and thumb into a closed fist. Closing your palm turns the screen off (needs the device-admin grant on the main screen).",
+    "fist" to "Curl all fingers and thumb into a closed fist, palm facing the camera.",
     "thumbs_up" to "Curl your fingers, extend only your thumb pointing up.",
     "thumbs_down" to "Curl your fingers, extend only your thumb pointing down.",
     "peace" to "Extend index and middle finger in a V, curl the rest.",

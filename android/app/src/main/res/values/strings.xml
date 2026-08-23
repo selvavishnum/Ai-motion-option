@@ -1,12 +1,28 @@
 <resources>
     <string name="app_name">Air Sensor</string>
-    <string name="accessibility_service_description">Lets air-gestures detected via the front camera control other apps system-wide: swipe, pinch to zoom, tap, back, home, open recents, and launching apps.</string>
+    <string name="app_tagline">Control your phone with air gestures, without touching the screen.</string>
+
+    <!--
+      Shown on the Accessibility settings screen, and read by Play review. It states the
+      disability use case first because that is what justifies an accessibility service existing,
+      and it states plainly what the service does *not* do — this one injects gestures and never
+      reads screen content.
+    -->
+    <string name="accessibility_service_description">Air Sensor lets people who cannot reliably touch the screen operate their phone hands-free. Hand and face movements seen by the front camera are turned into swipes, taps, pinch-to-zoom, Back, Home, Recents and app launches, so the phone can be used without touching it. This service performs those gestures for you. It does not read the content of your screen.</string>
+
     <string name="notification_channel_name">Gesture control running</string>
     <string name="notification_text">Watching for hand gestures</string>
-    <!-- Quick Settings tile. The label is what appears under the tile in the shade, so it has
-         to fit two short lines on a phone. -->
+
+    <!-- Quick Settings tile. The label appears under the tile in the shade, so it has to fit two
+         short lines on a phone. -->
     <string name="tile_label">Air gestures</string>
     <string name="tile_subtitle_on">On</string>
     <string name="tile_subtitle_off">Off</string>
     <string name="tile_subtitle_setup">Setup needed</string>
+    <string name="tile_hint">Puts an Air gestures switch in the pull-down shade, next to Wi-Fi. Banking and UPI apps refuse to pay while gesture control is on — the tile is the fastest way to switch it off and back.</string>
+
+    <string name="bubble_hint">A small dot over other apps, confirming gestures are being watched. Tap it to come back here.</string>
+    <string name="pointer_hint">A blue dot follows your pointed finger, and holding still taps where it sits. Replaces finger-swipe scrolling while it is on.</string>
+    <string name="screen_off_hint">Releases the camera while the screen is off — by far the biggest battery saving available. Wave gestures keep working either way.</string>
+    <string name="battery_hint">Opens Android\'s battery settings. Find Air Sensor in the list and set it to unrestricted, or gesture control will be shut down in the background.</string>
 </resources>

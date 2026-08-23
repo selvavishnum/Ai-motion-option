@@ -3,6 +3,7 @@ package com.aimotion.handsfree.face
 import android.content.Context
 import android.content.SharedPreferences
 import com.aimotion.handsfree.gesture.ActionType
+import com.aimotion.handsfree.gesture.actionTypeOrNull
 import com.aimotion.handsfree.gesture.GestureAction
 import org.json.JSONObject
 
@@ -34,8 +35,13 @@ class FaceMappingStore(context: Context) {
             FaceGesture.entries.associateWith { gesture ->
                 val entry = json.optJSONObject(gesture.name)
                     ?: return@associateWith DEFAULT_FACE_MAPPING.getValue(gesture)
+                // An action type this build no longer has (LOCK_SCREEN, removed with device
+                // admin) falls back to the default for that trigger alone, rather than throwing
+                // and taking every other saved mapping down with it.
+                val type = actionTypeOrNull(entry.getString("type"))
+                    ?: return@associateWith DEFAULT_FACE_MAPPING.getValue(gesture)
                 GestureAction(
-                    type = ActionType.valueOf(entry.getString("type")),
+                    type = type,
                     packageName = entry.optString("packageName").ifEmpty { null },
                 )
             }

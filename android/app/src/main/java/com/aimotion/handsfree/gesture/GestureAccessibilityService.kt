@@ -2,8 +2,6 @@ package com.aimotion.handsfree.gesture
 
 import android.accessibilityservice.AccessibilityService
 import android.accessibilityservice.GestureDescription
-import android.app.admin.DevicePolicyManager
-import android.content.ComponentName
 import android.content.Context
 import android.content.Intent
 import android.graphics.Path
@@ -54,24 +52,6 @@ class GestureAccessibilityService : AccessibilityService() {
             ActionType.RECENTS -> performGlobalAction(GLOBAL_ACTION_RECENTS)
             ActionType.LAUNCH_APP -> launchApp(action.packageName)
             ActionType.WAKE_SCREEN -> wakeScreen()
-            ActionType.LOCK_SCREEN -> lockScreen()
-        }
-    }
-
-    /** Turns the screen off. Only possible as an activated device admin holding force-lock; if
-     * the user hasn't granted that (or has revoked it), lockNow throws and this is a no-op
-     * rather than a crash — MainActivity is where the grant is offered. */
-    private fun lockScreen() {
-        val dpm = getSystemService(Context.DEVICE_POLICY_SERVICE) as DevicePolicyManager
-        val admin = ComponentName(this, AirSensorDeviceAdminReceiver::class.java)
-        if (!dpm.isAdminActive(admin)) {
-            Log.w(TAG, "lock screen requested but device admin is not active")
-            return
-        }
-        try {
-            dpm.lockNow()
-        } catch (e: SecurityException) {
-            Log.w(TAG, "lockNow denied", e)
         }
     }
 

@@ -1,7 +1,47 @@
 <resources>
-    <style name="Theme.HandsFree" parent="Theme.MaterialComponents.DayNight.NoActionBar">
+    <!--
+      Light-only, deliberately. DayNight would hand this app a dark mode nobody designed: the
+      palette, the hairline borders and the flat white cards are all built for one background.
+      A dark theme is a design exercise, not a parent-style swap, so the app commits to light
+      rather than shipping a half-broken dark.
+    -->
+    <style name="Theme.HandsFree" parent="Theme.MaterialComponents.Light.NoActionBar">
         <item name="colorPrimary">@color/brand</item>
+        <item name="colorOnPrimary">@color/onBrand</item>
+        <item name="colorSecondary">@color/brand</item>
+        <item name="android:colorBackground">@color/background</item>
         <item name="android:windowBackground">@color/background</item>
+        <item name="colorSurface">@color/surface</item>
+        <item name="colorOnSurface">@color/onSurface</item>
         <item name="colorOnBackground">@color/onSurface</item>
+        <item name="colorError">@color/danger</item>
+
+        <!-- Light system bars, so the status bar reads as part of the page rather than a black
+             band above it. android:windowLightStatusBar flips the icons to dark; without it they
+             would be white on white and vanish. -->
+        <item name="android:statusBarColor">@color/background</item>
+        <item name="android:navigationBarColor">@color/background</item>
+        <item name="android:windowLightStatusBar">true</item>
+        <item name="android:windowLightNavigationBar">true</item>
+    </style>
+
+    <!-- One card style, used for every section, so spacing and borders can't drift apart. -->
+    <style name="Widget.AirSensor.Card" parent="">
+        <item name="android:background">@drawable/card_background</item>
+        <item name="android:padding">16dp</item>
+        <item name="android:layout_marginTop">12dp</item>
+    </style>
+
+    <style name="TextAppearance.AirSensor.SectionTitle" parent="TextAppearance.MaterialComponents.Subtitle1">
+        <item name="android:textColor">@color/onSurface</item>
+        <item name="android:textSize">15sp</item>
+        <item name="android:textStyle">bold</item>
+        <item name="android:letterSpacing">0.01</item>
+    </style>
+
+    <style name="TextAppearance.AirSensor.Hint" parent="TextAppearance.MaterialComponents.Body2">
+        <item name="android:textColor">@color/muted</item>
+        <item name="android:textSize">13sp</item>
+        <item name="android:lineSpacingMultiplier">1.25</item>
     </style>
 </resources>
