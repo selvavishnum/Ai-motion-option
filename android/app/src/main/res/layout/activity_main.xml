@@ -128,6 +128,22 @@
             android:textColor="@color/onSurface" />
 
         <com.google.android.material.switchmaterial.SwitchMaterial
+            android:id="@+id/batterySaverSwitch"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="4dp"
+            android:text="Save battery when screen is off"
+            android:textColor="@color/onSurface" />
+
+        <TextView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="2dp"
+            android:text="Turns the camera off while your screen is off — the biggest battery saving. Gestures then can't wake the screen; switch this off if you need that."
+            android:textColor="@color/muted"
+            android:textSize="12sp" />
+
+        <com.google.android.material.switchmaterial.SwitchMaterial
             android:id="@+id/bubbleSwitch"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"

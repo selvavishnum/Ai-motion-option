@@ -119,6 +119,10 @@ class MainActivity : AppCompatActivity() {
             toggles.faceEnabled = checked
             refreshStatus()
         }
+        binding.batterySaverSwitch.isChecked = toggles.pauseWhenScreenOff
+        binding.batterySaverSwitch.setOnCheckedChangeListener { _, checked ->
+            toggles.pauseWhenScreenOff = checked
+        }
         binding.bubbleSwitch.isChecked = toggles.bubbleEnabled
         binding.bubbleSwitch.setOnCheckedChangeListener { _, checked ->
             toggles.bubbleEnabled = checked

@@ -276,3 +276,25 @@ apps with Play Protect"**, install, then turn scanning back on.
 cd android
 ./gradlew assembleDebug   # needs the Android SDK; see android/app/build.gradle.kts for versions
 ```
+
+### Battery
+
+The camera is the dominant cost — there is no low-power gesture sensor to fall back on, so the
+front camera runs and every frame is fed to an on-device model. Three things keep that in check,
+two of them automatic:
+
+- **Idle throttling (automatic).** Most of the day nothing is in front of the phone. After five
+  seconds with no hand or face visible the loop drops from ~16 fps to ~3 fps, and snaps back the
+  instant a hand or face appears — before you have even formed a pose. The only cost is up to one
+  extra 300ms before the first gesture of a session registers.
+- **Screen-off release (setting, on by default).** With the screen off the phone is usually
+  pocketed or face down, so the camera films nothing. **Save battery when screen is off** unbinds
+  the camera entirely, letting the hardware power down; merely skipping frames would not, since
+  the sensor keeps streaming either way. The trade-off is that no gesture can wake the screen
+  while nothing is watching, so turn it off if you rely on palm-to-wake.
+- **Switch off the modality you don't use.** Air and Face detection each cost a model inference.
+  Turning one off halves the work — and makes the other roughly twice as fast to react.
+
+Battery-optimisation exemption is still worth granting: it stops OEM battery managers
+(ColorOS/Realme UI, MIUI) from killing the service outright, which is a reliability setting, not
+a power one.

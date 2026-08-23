@@ -3,8 +3,10 @@ package com.aimotion.handsfree.gesture
 import android.app.NotificationChannel
 import android.app.NotificationManager
 import android.app.PendingIntent
+import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.Intent
+import android.content.IntentFilter
 import android.graphics.Bitmap
 import android.graphics.Matrix
 import android.os.Build
@@ -40,6 +42,16 @@ private const val NOTIFICATION_ID = 1
 // faster *and* more accurate than before. Frames the detector can't keep up with are dropped by
 // STRATEGY_KEEP_ONLY_LATEST, so this self-regulates on slower phones.
 private const val MIN_FRAME_INTERVAL_MS = 60L
+
+// Idle throttling. Running the detector at full rate while nothing is in front of the camera is
+// the single largest avoidable battery cost here: most of the day there is no hand and no face,
+// yet every frame still paid for a bitmap copy and a model inference. After
+// [IDLE_AFTER_MS] with nothing detected the loop drops to a slow watch rate, and the moment a
+// hand or face appears — before any pose is even formed — it snaps back to full speed. The cost
+// is up to one extra [IDLE_FRAME_INTERVAL_MS] before the first gesture of a session registers;
+// everything after that is unaffected.
+private const val IDLE_FRAME_INTERVAL_MS = 300L
+private const val IDLE_AFTER_MS = 5_000L
 
 // Debounce for the "big" discrete actions (Home, Back, lock, wink, ...). Raised from 2 to 3
 // frames: the higher frame rate buys enough headroom to demand more confirmation than before
@@ -77,6 +89,15 @@ class GestureControlService : LifecycleService() {
     private var lastFrameAtMs = 0L
     private var frameCounter = 0
 
+    /** When a hand or face was last actually visible. Drives the idle throttle above. Written
+     * from the MediaPipe callback threads and read on the analysis thread, hence volatile. */
+    @Volatile
+    private var lastSubjectSeenAtMs = 0L
+
+    /** Whether a camera use case is currently bound. Tracked so the screen-off release and the
+     * screen-on rebind can't double-bind or unbind nothing. */
+    private var cameraBound = false
+
     // Confined to analysisExecutor; see toUprightMirroredBitmap.
     private var cachedMatrix: Matrix? = null
     private var cachedRotation = Int.MIN_VALUE
@@ -103,6 +124,17 @@ class GestureControlService : LifecycleService() {
         startForeground(NOTIFICATION_ID, buildNotification())
         initDetectorsAsync()
         startCamera()
+        // ACTION_SCREEN_ON/OFF are only deliverable to a runtime-registered receiver; they
+        // cannot be declared in the manifest.
+        ContextCompat.registerReceiver(
+            this,
+            screenStateReceiver,
+            IntentFilter().apply {
+                addAction(Intent.ACTION_SCREEN_ON)
+                addAction(Intent.ACTION_SCREEN_OFF)
+            },
+            ContextCompat.RECEIVER_NOT_EXPORTED,
+        )
         // Ensure the status bubble is showing whenever gesture control is, not only when
         // MainActivity happens to be open — a no-op if the overlay permission isn't granted,
         // and skipped entirely when the user has hidden the dot.
@@ -130,7 +162,9 @@ class GestureControlService : LifecycleService() {
 
     override fun onDestroy() {
         super.onDestroy()
+        runCatching { unregisterReceiver(screenStateReceiver) }
         cameraProvider?.unbindAll()
+        cameraBound = false
         // Queued rather than closed inline: the helpers are owned by analysisExecutor (see
         // initDetectorsAsync), and stopping mid-download would otherwise leak a landmarker that
         // hadn't been assigned yet. shutdown() still lets this last task run.
@@ -149,6 +183,7 @@ class GestureControlService : LifecycleService() {
     }
 
     private fun startCamera() {
+        if (cameraBound) return
         val future = ProcessCameraProvider.getInstance(this)
         future.addListener({
             val provider = future.get()
@@ -163,15 +198,54 @@ class GestureControlService : LifecycleService() {
             try {
                 provider.unbindAll()
                 provider.bindToLifecycle(this, CameraSelector.DEFAULT_FRONT_CAMERA, analysis)
+                cameraBound = true
             } catch (e: Exception) {
                 Log.e(TAG, "failed to bind camera", e)
             }
         }, ContextCompat.getMainExecutor(this))
     }
 
+    /**
+     * Releases the camera without stopping the service.
+     *
+     * Skipping frames is not enough to save power: the sensor keeps streaming and stays powered
+     * either way. Unbinding is what actually lets the camera hardware shut down, which is the
+     * whole point when the screen is off and nobody can see the result anyway.
+     */
+    private fun releaseCamera() {
+        if (!cameraBound) return
+        cameraProvider?.unbindAll()
+        cameraBound = false
+        // Next resume should start at full rate rather than inheriting a stale idle timer.
+        lastSubjectSeenAtMs = SystemClock.elapsedRealtime()
+    }
+
+    /**
+     * With the screen off the phone is usually in a pocket or face down, so the camera is
+     * filming nothing while the detector burns battery on it. Releasing the camera there is the
+     * largest power saving available to this app.
+     *
+     * The cost is that a gesture cannot wake the screen, since nothing is watching — which is
+     * why this is a user-visible setting rather than unconditional behaviour.
+     */
+    private val screenStateReceiver = object : BroadcastReceiver() {
+        override fun onReceive(context: Context?, intent: Intent?) {
+            when (intent?.action) {
+                Intent.ACTION_SCREEN_OFF -> if (toggles.pauseWhenScreenOff) releaseCamera()
+                Intent.ACTION_SCREEN_ON -> startCamera()
+            }
+        }
+    }
+
     private fun analyzeFrame(imageProxy: ImageProxy) {
         val now = SystemClock.elapsedRealtime()
-        if (now - lastFrameAtMs < MIN_FRAME_INTERVAL_MS) {
+        // Slow down while nothing is in view; full rate resumes the instant something appears.
+        val interval = if (now - lastSubjectSeenAtMs > IDLE_AFTER_MS) {
+            IDLE_FRAME_INTERVAL_MS
+        } else {
+            MIN_FRAME_INTERVAL_MS
+        }
+        if (now - lastFrameAtMs < interval) {
             imageProxy.close()
             return
         }
@@ -251,6 +325,10 @@ class GestureControlService : LifecycleService() {
     }
 
     private fun onLandmarkResult(result: com.google.mediapipe.tasks.vision.handlandmarker.HandLandmarkerResult) {
+        // Any visible hand lifts the idle throttle, not just a recognised pose — so by the time
+        // you have formed a gesture the loop is already back at full rate.
+        if (result.landmarks().isNotEmpty()) lastSubjectSeenAtMs = SystemClock.elapsedRealtime()
+
         // topGesture() rather than toGestures(): the detector tracks a single hand and only the
         // first result was ever read, so building a list and a Pair per frame was garbage.
         val top = result.topGesture()
@@ -379,6 +457,9 @@ class GestureControlService : LifecycleService() {
     }
 
     private fun onFaceResult(result: com.google.mediapipe.tasks.vision.facelandmarker.FaceLandmarkerResult) {
+        // Any visible face lifts the idle throttle — see the hand path.
+        if (result.faceLandmarks().isNotEmpty()) lastSubjectSeenAtMs = SystemClock.elapsedRealtime()
+
         // faceSignals() rather than blendshapeMap(): MediaPipe emits 52 blendshape categories and
         // the classifier reads six, so materialising the whole map every frame was waste.
         //
