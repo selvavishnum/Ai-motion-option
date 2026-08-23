@@ -153,10 +153,15 @@ one-time model download. Targets Android 12+ (`minSdk 31`).
 
 ### Gestures
 
+Hand and face detection each have their **own on/off switch** on the main screen. That's a
+speed control as much as a preference: the camera's frames are a fixed budget, and when both are
+enabled they alternate frame-by-frame, so switching off the one you don't use roughly halves how
+long the other takes to react.
+
 | Gesture                              | Default action  |
 | ------------------------------------- | --------------- |
 | Open palm                             | Wake screen     |
-| Fist (closed palm)                    | Home            |
+| Fist (closed palm)                    | Screen off (needs device admin) |
 | Peace/victory                         | Swipe right     |
 | Thumbs up                             | Swipe up        |
 | Thumbs down                           | Swipe down      |
@@ -194,17 +199,24 @@ to perform it, and its current mapped action.
 
 ### Known limitations (by design, not bugs)
 
-- **No "screen off" gesture.** Android gives ordinary apps no API to turn the screen off —
-  only Device Admin's `lockNow()` comes close, and that requires a heavy, rarely-granted
-  permission. Palm-close maps to Home instead of a lock; open-palm wakes the screen back up.
+- **"Screen off" needs a device-admin grant.** Android gives an ordinary app no API to turn the
+  display off. The only sanctioned route is becoming a device admin holding the `force-lock`
+  policy and calling `lockNow()`, so palm-close does work — but only after you tap **Allow
+  screen off (device admin)** and accept a deliberately scary-looking system dialog. The policy
+  file requests *force-lock only*: no data wipe, no password control. Without the grant the
+  gesture is a silent no-op. Revoke any time in Settings → Security → Device admin apps.
 - **The "install unknown sources" / overlay warning on banking apps is not a bug.** Android
   deliberately blocks overlay windows (and warns about them) on screens a banking/finance app
   marks as secure, to stop tapjacking-style attacks — the exact pattern used by overlay
   malware. This app does not attempt to bypass that protection, and won't.
-- **Latency is tuned per gesture, not zero everywhere.** Continuous motions (the air
-  trackpad, pinch-zoom) use a short debounce so they feel closer to real-time. Discrete
-  high-impact actions (Home, Back, wake) keep a slightly longer debounce/cooldown so an
-  accidental half-second pose doesn't misfire them.
+- **Latency is tuned per gesture, and is not literally zero.** Camera exposure, model
+  inference, and gesture dispatch each cost real milliseconds. What's controllable is the frame
+  budget, and that dominates everything: the debounce counts *frames*, so the frame rate sets
+  how long a pose takes to confirm. At 60ms per frame a discrete pose confirms in roughly
+  180ms with only one modality enabled, or ~360ms with both (down from ~720ms). Continuous
+  motions — the air trackpad and pinch-zoom — bypass that debounce entirely and fire on a ~90ms
+  cooldown. Discrete high-impact actions (screen off, Home, Back) deliberately keep the
+  three-frame confirmation so a hand passing through a pose mid-motion can't trigger them.
 - **Gaze (look left/right) and air-trackpad direction follow a mirror, not the raw camera.**
   Camera frames are rotated upright and flipped horizontally before detection, so the frame
   matches what you'd see in a mirror: move your hand to *your* right and it swipes right. Both

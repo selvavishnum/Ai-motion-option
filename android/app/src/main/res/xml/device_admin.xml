@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Force-lock only: the minimum needed for the "screen off" gesture to call lockNow().
+     Deliberately does not request wipe-data, password policies, or any other device-admin
+     power, so activating this grants nothing beyond locking the screen. -->
+<device-admin xmlns:android="http://schemas.android.com/apk/res/android">
+    <uses-policies>
+        <force-lock />
+    </uses-policies>
+</device-admin>

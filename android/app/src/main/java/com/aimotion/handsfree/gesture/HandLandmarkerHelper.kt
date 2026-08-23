@@ -5,6 +5,7 @@ import android.graphics.Bitmap
 import android.util.Log
 import com.google.mediapipe.framework.image.BitmapImageBuilder
 import com.google.mediapipe.tasks.core.BaseOptions
+import com.google.mediapipe.tasks.core.Delegate
 import com.google.mediapipe.tasks.vision.core.RunningMode
 import com.google.mediapipe.tasks.vision.handlandmarker.HandLandmarker
 import com.google.mediapipe.tasks.vision.handlandmarker.HandLandmarkerResult
@@ -26,15 +27,36 @@ class HandLandmarkerHelper(
 
     init {
         val modelFile = ensureModel(context)
-        val options = HandLandmarker.HandLandmarkerOptions.builder()
-            .setBaseOptions(BaseOptions.builder().setModelAssetPath(modelFile.absolutePath).build())
+
+        fun build(delegate: Delegate) = HandLandmarker.HandLandmarkerOptions.builder()
+            .setBaseOptions(
+                BaseOptions.builder()
+                    .setModelAssetPath(modelFile.absolutePath)
+                    .setDelegate(delegate)
+                    .build()
+            )
             .setRunningMode(RunningMode.LIVE_STREAM)
-            .setNumHands(2)
-            .setMinHandDetectionConfidence(0.6f)
+            // Only the first hand is ever read (see toGestures and the trackpad/pinch tracking),
+            // so detecting one instead of two is free latency.
+            .setNumHands(1)
+            // Lowered from 0.6: the stable-frame debounce downstream is what rejects false
+            // positives, so a stricter detector here only costs missed hands. Presence and
+            // tracking thresholds keep the landmarks steady between detections.
+            .setMinHandDetectionConfidence(0.5f)
+            .setMinHandPresenceConfidence(0.5f)
+            .setMinTrackingConfidence(0.5f)
             .setResultListener { result, _ -> onResult(result) }
             .setErrorListener { e -> Log.e(TAG, "detect error", e) }
             .build()
-        landmarker = HandLandmarker.createFromOptions(context, options)
+
+        // GPU inference is markedly faster, but the delegate fails to initialise on some
+        // drivers/emulators — fall back rather than leaving gesture control dead.
+        landmarker = try {
+            HandLandmarker.createFromOptions(context, build(Delegate.GPU))
+        } catch (e: Throwable) {
+            Log.w(TAG, "GPU delegate unavailable, falling back to CPU", e)
+            HandLandmarker.createFromOptions(context, build(Delegate.CPU))
+        }
     }
 
     fun detectAsync(bitmap: Bitmap, timestampMs: Long) {

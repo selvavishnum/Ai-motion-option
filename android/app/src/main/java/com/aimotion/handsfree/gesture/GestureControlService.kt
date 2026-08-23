@@ -32,22 +32,33 @@ import java.util.concurrent.Executors
 private const val TAG = "GestureControlService"
 private const val CHANNEL_ID = "gesture_control"
 private const val NOTIFICATION_ID = 1
-private const val MIN_FRAME_INTERVAL_MS = 180L // ~5 fps, plenty for gesture control
-// Debounce for the "big" discrete actions (Home, Back, wake, wink, ...): fast enough to feel
-// responsive, but still requires two consecutive matching frames + a cooldown so a hand/face
-// passing briefly through a pose mid-motion can't misfire something disruptive.
-private const val STABLE_FRAMES_REQUIRED = 2
-private const val ACTION_COOLDOWN_MS = 600L
+// Frame budget. This single number dominates how quickly any gesture can possibly fire, because
+// the debounce below counts *frames*: at the old 180ms (5.5fps, halved again to 2.8fps per
+// detector by alternating) a two-frame debounce meant a ~720ms wait before anything happened.
+// At 60ms a detector sees a frame every 60-120ms depending on whether the other one is also on,
+// so a three-frame debounce now costs ~180-360ms while sampling motion far more densely — both
+// faster *and* more accurate than before. Frames the detector can't keep up with are dropped by
+// STRATEGY_KEEP_ONLY_LATEST, so this self-regulates on slower phones.
+private const val MIN_FRAME_INTERVAL_MS = 60L
+
+// Debounce for the "big" discrete actions (Home, Back, lock, wink, ...). Raised from 2 to 3
+// frames: the higher frame rate buys enough headroom to demand more confirmation than before
+// while still cutting the wall-clock latency several times over, which is what stops a hand or
+// face passing through a pose mid-motion from misfiring something disruptive.
+private const val STABLE_FRAMES_REQUIRED = 3
+private const val ACTION_COOLDOWN_MS = 350L
 
 // Pinch-to-zoom and the finger-trackpad (below) are continuous motions, not static poses, so
 // they run on their own faster, separate cooldowns — they're meant to feel like actually
 // dragging/scrolling, not like a discrete, debounced button press.
-private const val PINCH_DISTANCE_DELTA_THRESHOLD = 0.035f // normalized (0..1) coordinate space
-private const val PINCH_COOLDOWN_MS = 220L
+private const val PINCH_DISTANCE_DELTA_THRESHOLD = 0.030f // normalized (0..1) coordinate space
+private const val PINCH_COOLDOWN_MS = 90L
 
-private const val TRACKPAD_MOVE_THRESHOLD = 0.045f // normalized (0..1) coordinate space
-private const val TRACKPAD_COOLDOWN_MS = 200L
-private const val TRACKPAD_HOLD_FRAMES_FOR_TAP = 2
+// Threshold lowered alongside the frame interval: frames are ~3x closer together now, so a hand
+// moving at the same real-world speed travels proportionally less between them.
+private const val TRACKPAD_MOVE_THRESHOLD = 0.018f // normalized (0..1) coordinate space
+private const val TRACKPAD_COOLDOWN_MS = 90L
+private const val TRACKPAD_HOLD_FRAMES_FOR_TAP = 4
 
 /** Foreground service that keeps the front camera running while other apps are on screen,
  * classifies the gesture in each frame on-device, and — once the same gesture has been seen
@@ -57,6 +68,7 @@ class GestureControlService : LifecycleService() {
 
     private lateinit var mappingStore: GestureMappingStore
     private lateinit var faceMappingStore: FaceMappingStore
+    private lateinit var toggles: GestureToggleStore
     private var handLandmarkerHelper: HandLandmarkerHelper? = null
     private var faceLandmarkerHelper: FaceLandmarkerHelper? = null
     private var cameraProvider: ProcessCameraProvider? = null
@@ -83,6 +95,7 @@ class GestureControlService : LifecycleService() {
         super.onCreate()
         mappingStore = GestureMappingStore(this)
         faceMappingStore = FaceMappingStore(this)
+        toggles = GestureToggleStore(this)
         startForeground(NOTIFICATION_ID, buildNotification())
         initDetectorsAsync()
         startCamera()
@@ -163,14 +176,25 @@ class GestureControlService : LifecycleService() {
         } finally {
             imageProxy.close()
         }
-        // Alternate hand/face detection per frame rather than running both models every frame —
-        // keeps per-frame cost down on mid-range phones while still updating each ~2-3x/sec,
-        // plenty for discrete gesture/expression debouncing.
+        // Route the frame to whichever detectors are switched on. Running both models on every
+        // frame is too expensive for a mid-range phone, so when both are enabled they alternate
+        // — but when only one is on it gets *every* frame, which halves how long that modality
+        // takes to recognise a gesture. That's why the on/off switches are a responsiveness
+        // control as much as a preference: turning off the half you aren't using makes the half
+        // you are twice as fast.
+        val handOn = toggles.handEnabled
+        val faceOn = toggles.faceEnabled
         frameCounter++
-        if (frameCounter % 2 == 0) {
-            handLandmarkerHelper?.detectAsync(bitmap, now)
-        } else {
-            faceLandmarkerHelper?.detectAsync(bitmap, now)
+        when {
+            handOn && faceOn ->
+                if (frameCounter % 2 == 0) {
+                    handLandmarkerHelper?.detectAsync(bitmap, now)
+                } else {
+                    faceLandmarkerHelper?.detectAsync(bitmap, now)
+                }
+            handOn -> handLandmarkerHelper?.detectAsync(bitmap, now)
+            faceOn -> faceLandmarkerHelper?.detectAsync(bitmap, now)
+            else -> Unit // both off: camera stays bound, nothing is inferred
         }
     }
 

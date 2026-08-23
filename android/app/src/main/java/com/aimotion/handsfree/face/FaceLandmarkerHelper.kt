@@ -5,6 +5,7 @@ import android.graphics.Bitmap
 import android.util.Log
 import com.google.mediapipe.framework.image.BitmapImageBuilder
 import com.google.mediapipe.tasks.core.BaseOptions
+import com.google.mediapipe.tasks.core.Delegate
 import com.google.mediapipe.tasks.vision.core.RunningMode
 import com.google.mediapipe.tasks.vision.facelandmarker.FaceLandmarker
 import com.google.mediapipe.tasks.vision.facelandmarker.FaceLandmarkerResult
@@ -26,15 +27,31 @@ class FaceLandmarkerHelper(
 
     init {
         val modelFile = ensureModel(context)
-        val options = FaceLandmarker.FaceLandmarkerOptions.builder()
-            .setBaseOptions(BaseOptions.builder().setModelAssetPath(modelFile.absolutePath).build())
+
+        fun build(delegate: Delegate) = FaceLandmarker.FaceLandmarkerOptions.builder()
+            .setBaseOptions(
+                BaseOptions.builder()
+                    .setModelAssetPath(modelFile.absolutePath)
+                    .setDelegate(delegate)
+                    .build()
+            )
             .setRunningMode(RunningMode.LIVE_STREAM)
             .setNumFaces(1)
             .setOutputFaceBlendshapes(true)
+            .setMinFaceDetectionConfidence(0.5f)
+            .setMinFacePresenceConfidence(0.5f)
+            .setMinTrackingConfidence(0.5f)
             .setResultListener { result, _ -> onResult(result) }
             .setErrorListener { e -> Log.e(TAG, "detect error", e) }
             .build()
-        landmarker = FaceLandmarker.createFromOptions(context, options)
+
+        // See HandLandmarkerHelper: GPU where available, CPU where the delegate won't start.
+        landmarker = try {
+            FaceLandmarker.createFromOptions(context, build(Delegate.GPU))
+        } catch (e: Throwable) {
+            Log.w(TAG, "GPU delegate unavailable, falling back to CPU", e)
+            FaceLandmarker.createFromOptions(context, build(Delegate.CPU))
+        }
     }
 
     fun detectAsync(bitmap: Bitmap, timestampMs: Long) {
