@@ -52,9 +52,15 @@ def test_thumbs_up() -> None:
 
 def test_thumbs_down() -> None:
     lm = _base_landmarks()
-    for tip, pip in ((8, 6), (12, 10), (16, 14), (20, 18)):
-        _curl(lm, tip, pip)
+    # The wrist moves up the frame so the thumb has room to point below it, so the fingers have
+    # to be re-curled around *this* wrist rather than the one _base_landmarks assumed. Leaving
+    # them where _curl puts them would place each "curled" tip further from the wrist than its
+    # own knuckle — a hand shape that cannot exist, and one the old tip-above-pip rule happened
+    # not to notice because it never looked at the wrist at all.
     lm[0] = Point(x=0.5, y=0.5)  # wrist
+    for tip, pip in ((8, 6), (12, 10), (16, 14), (20, 18)):
+        lm[pip] = Point(x=0.5, y=0.35)  # knuckle, above the wrist
+        lm[tip] = Point(x=0.5, y=0.42)  # tip folded back toward the palm
     lm[3] = Point(x=0.6, y=0.7)
     lm[4] = Point(x=0.5, y=0.9)  # thumb extended below the wrist
     assert classify_gesture(lm, Handedness.RIGHT) == Gesture.THUMBS_DOWN
