@@ -3,6 +3,11 @@ plugins {
     id("org.jetbrains.kotlin.android")
 }
 
+// Resolved once, and treated as absent when blank as well as when unset: the workflow always
+// passes RELEASE_KEYSTORE_PATH, and an unset step output arrives as "" rather than not at all.
+// A null check alone let that empty string through to file(""), which throws.
+val releaseKeystorePath: String? = System.getenv("RELEASE_KEYSTORE_PATH")?.takeIf { it.isNotBlank() }
+
 android {
     namespace = "com.aimotion.handsfree"
     compileSdk = 35
@@ -30,9 +35,8 @@ android {
         // and passes its path as RELEASE_KEYSTORE_PATH. Without them a release build is unsigned
         // rather than signed with a key that isn't really yours — see the null check below.
         create("release") {
-            val keystorePath = System.getenv("RELEASE_KEYSTORE_PATH")
-            if (keystorePath != null) {
-                storeFile = file(keystorePath)
+            if (releaseKeystorePath != null) {
+                storeFile = file(releaseKeystorePath)
                 storePassword = System.getenv("RELEASE_KEYSTORE_PASSWORD")
                 keyAlias = System.getenv("RELEASE_KEY_ALIAS")
                 keyPassword = System.getenv("RELEASE_KEY_PASSWORD")
@@ -46,8 +50,7 @@ android {
             // Only attached when a key was actually supplied. Leaving the config attached with no
             // storeFile fails the build outright, which would mean nobody could produce a local
             // release build without the private key — including to check that it compiles.
-            signingConfig = signingConfigs.getByName("release")
-                .takeIf { System.getenv("RELEASE_KEYSTORE_PATH") != null }
+            signingConfig = signingConfigs.getByName("release").takeIf { releaseKeystorePath != null }
         }
     }
 
