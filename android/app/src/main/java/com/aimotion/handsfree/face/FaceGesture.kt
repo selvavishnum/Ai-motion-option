@@ -18,6 +18,15 @@ enum class FaceGesture(val label: String) {
     SMILE("smile"),
     GAZE_LEFT("gaze_left"),
     GAZE_RIGHT("gaze_right"),
+
+    // Head *movement*, not a held pose — detected by tracking the nose over time rather than
+    // from blendshapes, so these never reach classifyFaceGesture. Independent of the gaze
+    // entries above: gaze is measured relative to the eye corners, so looking sideways and
+    // moving your whole head are genuinely different signals.
+    HEAD_LEFT("head_left"),
+    HEAD_RIGHT("head_right"),
+    HEAD_UP("head_up"),
+    HEAD_DOWN("head_down"),
 }
 
 private const val WINK_CLOSED_THRESHOLD = 0.6f
@@ -108,4 +117,8 @@ val DEFAULT_FACE_MAPPING: Map<FaceGesture, GestureAction> = mapOf(
     FaceGesture.SMILE to GestureAction(ActionType.TAP),
     FaceGesture.GAZE_LEFT to GestureAction(ActionType.SWIPE_LEFT),
     FaceGesture.GAZE_RIGHT to GestureAction(ActionType.SWIPE_RIGHT),
+    FaceGesture.HEAD_LEFT to GestureAction(ActionType.SWIPE_LEFT),
+    FaceGesture.HEAD_RIGHT to GestureAction(ActionType.SWIPE_RIGHT),
+    FaceGesture.HEAD_UP to GestureAction(ActionType.SWIPE_UP),
+    FaceGesture.HEAD_DOWN to GestureAction(ActionType.SWIPE_DOWN),
 )

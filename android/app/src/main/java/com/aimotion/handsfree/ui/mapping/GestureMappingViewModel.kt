@@ -32,6 +32,7 @@ private val FACE_EMOJI = mapOf(
     "blink" to "😉", "eyebrows_up" to "😲", "mouth_open" to "😮", "smile" to "😄",
     "wink_left" to "😉", "wink_right" to "😜", "eyebrows_down" to "🥺",
     "gaze_left" to "👈", "gaze_right" to "👉",
+    "head_left" to "⬅️", "head_right" to "➡️", "head_up" to "⬆️", "head_down" to "⬇️",
 )
 
 private fun String.toTitleLabel() = replace('_', ' ').replaceFirstChar { it.uppercase() }

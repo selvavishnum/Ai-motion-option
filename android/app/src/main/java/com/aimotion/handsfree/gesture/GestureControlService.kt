@@ -28,6 +28,7 @@ import com.aimotion.handsfree.face.classifyFaceGesture
 import com.aimotion.handsfree.face.faceSignals
 import com.aimotion.handsfree.face.classifyGaze
 import com.aimotion.handsfree.face.gazeOffset
+import com.aimotion.handsfree.face.headPoint
 import com.aimotion.handsfree.overlay.OverlayBubbleService
 import java.util.concurrent.Executors
 
@@ -66,11 +67,17 @@ private const val ACTION_COOLDOWN_MS = 350L
 private const val PINCH_DISTANCE_DELTA_THRESHOLD = 0.030f // normalized (0..1) coordinate space
 private const val PINCH_COOLDOWN_MS = 90L
 
-// Threshold lowered alongside the frame interval: frames are ~3x closer together now, so a hand
-// moving at the same real-world speed travels proportionally less between them.
-private const val TRACKPAD_MOVE_THRESHOLD = 0.018f // normalized (0..1) coordinate space
+// Displacement accumulated since the last fired swipe, not per-frame delta — see
+// DirectionalMotionTracker. Because travel now adds up instead of being sampled, this can be a
+// real distance the finger has moved rather than a hair-trigger on one noisy frame.
+private const val TRACKPAD_MOVE_THRESHOLD = 0.055f // normalized (0..1) coordinate space
 private const val TRACKPAD_COOLDOWN_MS = 90L
 private const val TRACKPAD_HOLD_FRAMES_FOR_TAP = 4
+
+// Head movement, as a fraction of the distance between the eyes — so the same real head movement
+// works at any distance from the phone. Roughly a third of an eye-span of travel.
+private const val HEAD_MOVE_THRESHOLD = 0.35f
+private const val HEAD_COOLDOWN_MS = 400L
 
 /** Foreground service that keeps the front camera running while other apps are on screen,
  * classifies the gesture in each frame on-device, and — once the same gesture has been seen
@@ -110,9 +117,12 @@ class GestureControlService : LifecycleService() {
     private var lastPinchDistance: Float? = null
     private var lastPinchFiredAtMs = 0L
 
-    private var lastPointPos: Pair<Float, Float>? = null
-    private var pointHoldStreak = 0
+    private val trackpadTracker = DirectionalMotionTracker(TRACKPAD_MOVE_THRESHOLD)
     private var lastTrackpadFiredAtMs = 0L
+    private var trackpadTapped = false
+
+    private val headTracker = DirectionalMotionTracker(HEAD_MOVE_THRESHOLD)
+    private var lastHeadFiredAtMs = 0L
 
     private var lastFaceFiredAtMs = 0L
     private var candidateFaceGesture: FaceGesture? = null
@@ -401,43 +411,72 @@ class GestureControlService : LifecycleService() {
             return
         }
         val tip = landmarks[8]
-        val pos = tip.x() to tip.y()
-        val previous = lastPointPos
-        lastPointPos = pos
-        if (previous == null) {
-            pointHoldStreak = 0
-            return
-        }
+        // Fed on every frame, including during the cooldown. That's the point: travel
+        // accumulates against an anchor that only moves when something fires, so a movement made
+        // while the cooldown was active still counts instead of being discarded.
+        val direction = trackpadTracker.update(tip.x(), tip.y())
 
-        val now = SystemClock.elapsedRealtime()
-        if (now - lastTrackpadFiredAtMs < TRACKPAD_COOLDOWN_MS) return
-
-        val dx = pos.first - previous.first
-        val dy = pos.second - previous.second
-        val movement = kotlin.math.max(kotlin.math.abs(dx), kotlin.math.abs(dy))
-
-        if (movement < TRACKPAD_MOVE_THRESHOLD) {
-            pointHoldStreak++
-            if (pointHoldStreak == TRACKPAD_HOLD_FRAMES_FOR_TAP) {
-                lastTrackpadFiredAtMs = now
+        if (direction == null) {
+            // Hold still to tap. "Still" now means it hasn't travelled from the anchor, rather
+            // than that two consecutive noisy frames happened to look similar.
+            if (!trackpadTapped && trackpadTracker.stillUpdates >= TRACKPAD_HOLD_FRAMES_FOR_TAP) {
+                trackpadTapped = true
+                lastTrackpadFiredAtMs = SystemClock.elapsedRealtime()
                 ActionDispatcher.fire(GestureAction(ActionType.TAP))
             }
             return
         }
-        pointHoldStreak = 0
 
-        val action = if (kotlin.math.abs(dx) > kotlin.math.abs(dy)) {
-            if (dx > 0) ActionType.SWIPE_RIGHT else ActionType.SWIPE_LEFT
-        } else {
-            if (dy > 0) ActionType.SWIPE_DOWN else ActionType.SWIPE_UP
-        }
+        trackpadTapped = false
+        val now = SystemClock.elapsedRealtime()
+        if (now - lastTrackpadFiredAtMs < TRACKPAD_COOLDOWN_MS) return
+
         lastTrackpadFiredAtMs = now
-        ActionDispatcher.fire(GestureAction(action))
+        ActionDispatcher.fire(GestureAction(direction.toSwipe()))
+    }
+
+    /**
+     * Head movement as a gesture, tracked the same way as the finger trackpad: displacement of
+     * the nose over time, normalised by the distance between the eyes so it behaves the same
+     * close up and at arm's length.
+     *
+     * Firing here also puts the discrete face path on cooldown. Turning your head moves the eyes
+     * through the frame too, and without that the same motion could land a head swipe and a gaze
+     * swipe back to back.
+     */
+    private fun handleHeadMotion(result: com.google.mediapipe.tasks.vision.facelandmarker.FaceLandmarkerResult) {
+        val head = result.headPoint()
+        if (head == null) {
+            headTracker.reset()
+            return
+        }
+
+        val direction = headTracker.update(head.x, head.y, head.scale) ?: return
+
+        val now = SystemClock.elapsedRealtime()
+        if (now - lastHeadFiredAtMs < HEAD_COOLDOWN_MS) return
+        lastHeadFiredAtMs = now
+        lastFaceFiredAtMs = now
+
+        val gesture = when (direction) {
+            Direction.LEFT -> FaceGesture.HEAD_LEFT
+            Direction.RIGHT -> FaceGesture.HEAD_RIGHT
+            Direction.UP -> FaceGesture.HEAD_UP
+            Direction.DOWN -> FaceGesture.HEAD_DOWN
+        }
+        faceMappingStore.load()[gesture]?.let { ActionDispatcher.fire(it) }
+    }
+
+    private fun Direction.toSwipe(): ActionType = when (this) {
+        Direction.LEFT -> ActionType.SWIPE_LEFT
+        Direction.RIGHT -> ActionType.SWIPE_RIGHT
+        Direction.UP -> ActionType.SWIPE_UP
+        Direction.DOWN -> ActionType.SWIPE_DOWN
     }
 
     private fun resetTrackpad() {
-        lastPointPos = null
-        pointHoldStreak = 0
+        trackpadTracker.reset()
+        trackpadTapped = false
     }
 
     private fun handlePinchTracking(result: com.google.mediapipe.tasks.vision.handlandmarker.HandLandmarkerResult) {
@@ -492,6 +531,10 @@ class GestureControlService : LifecycleService() {
     private fun onFaceResult(result: com.google.mediapipe.tasks.vision.facelandmarker.FaceLandmarkerResult) {
         // Any visible face lifts the idle throttle — see the hand path.
         if (result.faceLandmarks().isNotEmpty()) lastSubjectSeenAtMs = SystemClock.elapsedRealtime()
+
+        // Head movement is a continuous motion rather than an expression, so it is tracked
+        // separately and bypasses the blendshape debounce below.
+        handleHeadMotion(result)
 
         // faceSignals() rather than blendshapeMap(): MediaPipe emits 52 blendshape categories and
         // the classifier reads six, so materialising the whole map every frame was waste.
