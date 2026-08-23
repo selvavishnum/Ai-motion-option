@@ -36,12 +36,17 @@ private val FACE_HOW_TO = mapOf(
     "wink_right" to "Close only your right eye briefly, keep the left eye open.",
     "gaze_left" to "Keep your head still, look left with your eyes.",
     "gaze_right" to "Keep your head still, look right with your eyes.",
+    "head_left" to "Move your whole head to the left, then back.",
+    "head_right" to "Move your whole head to the right, then back.",
+    "head_up" to "Tip your head up, then back.",
+    "head_down" to "Tip your head down, then back.",
 )
 
 private val FACE_EMOJI = mapOf(
     "blink" to "😉", "eyebrows_up" to "😲", "mouth_open" to "😮", "smile" to "😄",
     "wink_left" to "😉", "wink_right" to "😜", "eyebrows_down" to "🥺",
     "gaze_left" to "👈", "gaze_right" to "👉",
+    "head_left" to "⬅️", "head_right" to "➡️", "head_up" to "⬆️", "head_down" to "⬇️",
 )
 
 class GestureGuideActivity : AppCompatActivity() {

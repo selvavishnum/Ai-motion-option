@@ -3,8 +3,10 @@ package com.aimotion.handsfree.gesture
 import android.app.NotificationChannel
 import android.app.NotificationManager
 import android.app.PendingIntent
+import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.Intent
+import android.content.IntentFilter
 import android.graphics.Bitmap
 import android.graphics.Matrix
 import android.os.Build
@@ -26,7 +28,9 @@ import com.aimotion.handsfree.face.classifyFaceGesture
 import com.aimotion.handsfree.face.faceSignals
 import com.aimotion.handsfree.face.classifyGaze
 import com.aimotion.handsfree.face.gazeOffset
+import com.aimotion.handsfree.face.headPoint
 import com.aimotion.handsfree.overlay.OverlayBubbleService
+import com.aimotion.handsfree.overlay.PointerOverlay
 import java.util.concurrent.Executors
 
 private const val TAG = "GestureControlService"
@@ -41,6 +45,16 @@ private const val NOTIFICATION_ID = 1
 // STRATEGY_KEEP_ONLY_LATEST, so this self-regulates on slower phones.
 private const val MIN_FRAME_INTERVAL_MS = 60L
 
+// Idle throttling. Running the detector at full rate while nothing is in front of the camera is
+// the single largest avoidable battery cost here: most of the day there is no hand and no face,
+// yet every frame still paid for a bitmap copy and a model inference. After
+// [IDLE_AFTER_MS] with nothing detected the loop drops to a slow watch rate, and the moment a
+// hand or face appears — before any pose is even formed — it snaps back to full speed. The cost
+// is up to one extra [IDLE_FRAME_INTERVAL_MS] before the first gesture of a session registers;
+// everything after that is unaffected.
+private const val IDLE_FRAME_INTERVAL_MS = 300L
+private const val IDLE_AFTER_MS = 5_000L
+
 // Debounce for the "big" discrete actions (Home, Back, lock, wink, ...). Raised from 2 to 3
 // frames: the higher frame rate buys enough headroom to demand more confirmation than before
 // while still cutting the wall-clock latency several times over, which is what stops a hand or
@@ -54,11 +68,31 @@ private const val ACTION_COOLDOWN_MS = 350L
 private const val PINCH_DISTANCE_DELTA_THRESHOLD = 0.030f // normalized (0..1) coordinate space
 private const val PINCH_COOLDOWN_MS = 90L
 
-// Threshold lowered alongside the frame interval: frames are ~3x closer together now, so a hand
-// moving at the same real-world speed travels proportionally less between them.
-private const val TRACKPAD_MOVE_THRESHOLD = 0.018f // normalized (0..1) coordinate space
+// Displacement accumulated since the last fired swipe, not per-frame delta — see
+// DirectionalMotionTracker. Because travel now adds up instead of being sampled, this can be a
+// real distance the finger has moved rather than a hair-trigger on one noisy frame.
+private const val TRACKPAD_MOVE_THRESHOLD = 0.055f // normalized (0..1) coordinate space
 private const val TRACKPAD_COOLDOWN_MS = 90L
 private const val TRACKPAD_HOLD_FRAMES_FOR_TAP = 4
+
+// Air pointer. Your hand only travels comfortably across the middle of the camera's view, so
+// that band is stretched to cover the whole screen — mapping the full frame would mean reaching
+// far to one side just to touch the edge of the display, and never quite getting to the corners.
+private const val POINTER_ACTIVE_LO = 0.2f
+private const val POINTER_ACTIVE_HI = 0.8f
+
+/** Low-pass factor for the pointer. Landmarks jitter by a few pixels every frame; unsmoothed the
+ * dot visibly buzzes even with a perfectly still hand. */
+private const val POINTER_SMOOTHING = 0.35f
+
+/** How far the fingertip may drift, as a fraction of the screen, and still count as held still
+ * for a tap. */
+private const val POINTER_TAP_TOLERANCE_PX = 28f
+
+// Head movement, as a fraction of the distance between the eyes — so the same real head movement
+// works at any distance from the phone. Roughly a third of an eye-span of travel.
+private const val HEAD_MOVE_THRESHOLD = 0.35f
+private const val HEAD_COOLDOWN_MS = 400L
 
 /** Foreground service that keeps the front camera running while other apps are on screen,
  * classifies the gesture in each frame on-device, and — once the same gesture has been seen
@@ -69,6 +103,8 @@ class GestureControlService : LifecycleService() {
     private lateinit var mappingStore: GestureMappingStore
     private lateinit var faceMappingStore: FaceMappingStore
     private lateinit var toggles: GestureToggleStore
+    private lateinit var proximityMappingStore: ProximityMappingStore
+    private var proximityDetector: ProximityGestureDetector? = null
     private var handLandmarkerHelper: HandLandmarkerHelper? = null
     private var faceLandmarkerHelper: FaceLandmarkerHelper? = null
     private var cameraProvider: ProcessCameraProvider? = null
@@ -76,6 +112,15 @@ class GestureControlService : LifecycleService() {
 
     private var lastFrameAtMs = 0L
     private var frameCounter = 0
+
+    /** When a hand or face was last actually visible. Drives the idle throttle above. Written
+     * from the MediaPipe callback threads and read on the analysis thread, hence volatile. */
+    @Volatile
+    private var lastSubjectSeenAtMs = 0L
+
+    /** Whether a camera use case is currently bound. Tracked so the screen-off release and the
+     * screen-on rebind can't double-bind or unbind nothing. */
+    private var cameraBound = false
 
     // Confined to analysisExecutor; see toUprightMirroredBitmap.
     private var cachedMatrix: Matrix? = null
@@ -87,9 +132,20 @@ class GestureControlService : LifecycleService() {
     private var lastPinchDistance: Float? = null
     private var lastPinchFiredAtMs = 0L
 
-    private var lastPointPos: Pair<Float, Float>? = null
-    private var pointHoldStreak = 0
+    private val trackpadTracker = DirectionalMotionTracker(TRACKPAD_MOVE_THRESHOLD)
     private var lastTrackpadFiredAtMs = 0L
+    private var trackpadTapped = false
+
+    private val headTracker = DirectionalMotionTracker(HEAD_MOVE_THRESHOLD)
+    private var lastHeadFiredAtMs = 0L
+
+    private var pointerOverlay: PointerOverlay? = null
+    private var pointerX = -1f
+    private var pointerY = -1f
+    private var pointerAnchorX = 0f
+    private var pointerAnchorY = 0f
+    private var pointerStillFrames = 0
+    private var pointerTapped = false
 
     private var lastFaceFiredAtMs = 0L
     private var candidateFaceGesture: FaceGesture? = null
@@ -100,13 +156,53 @@ class GestureControlService : LifecycleService() {
         mappingStore = GestureMappingStore(this)
         faceMappingStore = FaceMappingStore(this)
         toggles = GestureToggleStore(this)
+        proximityMappingStore = ProximityMappingStore(this)
         startForeground(NOTIFICATION_ID, buildNotification())
+        startProximityDetection()
         initDetectorsAsync()
         startCamera()
+        // ACTION_SCREEN_ON/OFF are only deliverable to a runtime-registered receiver; they
+        // cannot be declared in the manifest.
+        ContextCompat.registerReceiver(
+            this,
+            screenStateReceiver,
+            IntentFilter().apply {
+                addAction(Intent.ACTION_SCREEN_ON)
+                addAction(Intent.ACTION_SCREEN_OFF)
+            },
+            ContextCompat.RECEIVER_NOT_EXPORTED,
+        )
         // Ensure the status bubble is showing whenever gesture control is, not only when
         // MainActivity happens to be open — a no-op if the overlay permission isn't granted,
         // and skipped entirely when the user has hidden the dot.
         if (toggles.bubbleEnabled) OverlayBubbleService.start(this)
+    }
+
+    /**
+     * Wave detection runs on the proximity sensor, entirely independent of the camera.
+     *
+     * That independence is the point: it keeps working while the camera is released for the
+     * screen being off, which is precisely the window the camera cannot cover. Waving to wake the
+     * screen therefore still works with battery saving on — the trade-off that would otherwise
+     * force a choice between the two.
+     *
+     * Not tied to screen state, and not restarted on resume, because a hardware-triggered sensor
+     * costs a fraction of a milliamp; gating it would save nothing and add a failure mode.
+     */
+    private fun startProximityDetection() {
+        val detector = ProximityGestureDetector(this) { gesture -> onProximityGesture(gesture) }
+        if (!detector.isAvailable) {
+            Log.i(TAG, "no proximity sensor; wave gestures disabled on this device")
+            return
+        }
+        proximityDetector = detector
+        if (toggles.waveEnabled) detector.start()
+    }
+
+    private fun onProximityGesture(gesture: ProximityGesture) {
+        if (!toggles.waveEnabled) return
+        val action = proximityMappingStore.load()[gesture] ?: return
+        ActionDispatcher.fire(action)
     }
 
     /** Each helper downloads its model file the first time it's constructed — blocking network
@@ -130,7 +226,13 @@ class GestureControlService : LifecycleService() {
 
     override fun onDestroy() {
         super.onDestroy()
+        runCatching { unregisterReceiver(screenStateReceiver) }
+        proximityDetector?.stop()
+        proximityDetector = null
+        pointerOverlay?.destroy()
+        pointerOverlay = null
         cameraProvider?.unbindAll()
+        cameraBound = false
         // Queued rather than closed inline: the helpers are owned by analysisExecutor (see
         // initDetectorsAsync), and stopping mid-download would otherwise leak a landmarker that
         // hadn't been assigned yet. shutdown() still lets this last task run.
@@ -149,6 +251,7 @@ class GestureControlService : LifecycleService() {
     }
 
     private fun startCamera() {
+        if (cameraBound) return
         val future = ProcessCameraProvider.getInstance(this)
         future.addListener({
             val provider = future.get()
@@ -163,15 +266,54 @@ class GestureControlService : LifecycleService() {
             try {
                 provider.unbindAll()
                 provider.bindToLifecycle(this, CameraSelector.DEFAULT_FRONT_CAMERA, analysis)
+                cameraBound = true
             } catch (e: Exception) {
                 Log.e(TAG, "failed to bind camera", e)
             }
         }, ContextCompat.getMainExecutor(this))
     }
 
+    /**
+     * Releases the camera without stopping the service.
+     *
+     * Skipping frames is not enough to save power: the sensor keeps streaming and stays powered
+     * either way. Unbinding is what actually lets the camera hardware shut down, which is the
+     * whole point when the screen is off and nobody can see the result anyway.
+     */
+    private fun releaseCamera() {
+        if (!cameraBound) return
+        cameraProvider?.unbindAll()
+        cameraBound = false
+        // Next resume should start at full rate rather than inheriting a stale idle timer.
+        lastSubjectSeenAtMs = SystemClock.elapsedRealtime()
+    }
+
+    /**
+     * With the screen off the phone is usually in a pocket or face down, so the camera is
+     * filming nothing while the detector burns battery on it. Releasing the camera there is the
+     * largest power saving available to this app.
+     *
+     * The cost is that a gesture cannot wake the screen, since nothing is watching — which is
+     * why this is a user-visible setting rather than unconditional behaviour.
+     */
+    private val screenStateReceiver = object : BroadcastReceiver() {
+        override fun onReceive(context: Context?, intent: Intent?) {
+            when (intent?.action) {
+                Intent.ACTION_SCREEN_OFF -> if (toggles.pauseWhenScreenOff) releaseCamera()
+                Intent.ACTION_SCREEN_ON -> startCamera()
+            }
+        }
+    }
+
     private fun analyzeFrame(imageProxy: ImageProxy) {
         val now = SystemClock.elapsedRealtime()
-        if (now - lastFrameAtMs < MIN_FRAME_INTERVAL_MS) {
+        // Slow down while nothing is in view; full rate resumes the instant something appears.
+        val interval = if (now - lastSubjectSeenAtMs > IDLE_AFTER_MS) {
+            IDLE_FRAME_INTERVAL_MS
+        } else {
+            MIN_FRAME_INTERVAL_MS
+        }
+        if (now - lastFrameAtMs < interval) {
             imageProxy.close()
             return
         }
@@ -251,6 +393,10 @@ class GestureControlService : LifecycleService() {
     }
 
     private fun onLandmarkResult(result: com.google.mediapipe.tasks.vision.handlandmarker.HandLandmarkerResult) {
+        // Any visible hand lifts the idle throttle, not just a recognised pose — so by the time
+        // you have formed a gesture the loop is already back at full rate.
+        if (result.landmarks().isNotEmpty()) lastSubjectSeenAtMs = SystemClock.elapsedRealtime()
+
         // topGesture() rather than toGestures(): the detector tracks a single hand and only the
         // first result was ever read, so building a list and a Pair per frame was garbage.
         val top = result.topGesture()
@@ -290,43 +436,142 @@ class GestureControlService : LifecycleService() {
             return
         }
         val tip = landmarks[8]
-        val pos = tip.x() to tip.y()
-        val previous = lastPointPos
-        lastPointPos = pos
-        if (previous == null) {
-            pointHoldStreak = 0
+
+        // Pointer mode replaces swipe mode rather than running alongside it. Both at once would
+        // mean the dot tracking your finger while the page scrolls under it, which reads as the
+        // pointer causing the scroll.
+        if (toggles.pointerEnabled) {
+            handleAirPointer(tip.x(), tip.y())
             return
         }
+        hidePointer()
 
-        val now = SystemClock.elapsedRealtime()
-        if (now - lastTrackpadFiredAtMs < TRACKPAD_COOLDOWN_MS) return
+        // Fed on every frame, including during the cooldown. That's the point: travel
+        // accumulates against an anchor that only moves when something fires, so a movement made
+        // while the cooldown was active still counts instead of being discarded.
+        val direction = trackpadTracker.update(tip.x(), tip.y())
 
-        val dx = pos.first - previous.first
-        val dy = pos.second - previous.second
-        val movement = kotlin.math.max(kotlin.math.abs(dx), kotlin.math.abs(dy))
-
-        if (movement < TRACKPAD_MOVE_THRESHOLD) {
-            pointHoldStreak++
-            if (pointHoldStreak == TRACKPAD_HOLD_FRAMES_FOR_TAP) {
-                lastTrackpadFiredAtMs = now
+        if (direction == null) {
+            // Hold still to tap. "Still" now means it hasn't travelled from the anchor, rather
+            // than that two consecutive noisy frames happened to look similar.
+            if (!trackpadTapped && trackpadTracker.stillUpdates >= TRACKPAD_HOLD_FRAMES_FOR_TAP) {
+                trackpadTapped = true
+                lastTrackpadFiredAtMs = SystemClock.elapsedRealtime()
                 ActionDispatcher.fire(GestureAction(ActionType.TAP))
             }
             return
         }
-        pointHoldStreak = 0
 
-        val action = if (kotlin.math.abs(dx) > kotlin.math.abs(dy)) {
-            if (dx > 0) ActionType.SWIPE_RIGHT else ActionType.SWIPE_LEFT
-        } else {
-            if (dy > 0) ActionType.SWIPE_DOWN else ActionType.SWIPE_UP
-        }
+        trackpadTapped = false
+        val now = SystemClock.elapsedRealtime()
+        if (now - lastTrackpadFiredAtMs < TRACKPAD_COOLDOWN_MS) return
+
         lastTrackpadFiredAtMs = now
-        ActionDispatcher.fire(GestureAction(action))
+        ActionDispatcher.fire(GestureAction(direction.toSwipe()))
+    }
+
+    /**
+     * Head movement as a gesture, tracked the same way as the finger trackpad: displacement of
+     * the nose over time, normalised by the distance between the eyes so it behaves the same
+     * close up and at arm's length.
+     *
+     * Firing here also puts the discrete face path on cooldown. Turning your head moves the eyes
+     * through the frame too, and without that the same motion could land a head swipe and a gaze
+     * swipe back to back.
+     */
+    private fun handleHeadMotion(result: com.google.mediapipe.tasks.vision.facelandmarker.FaceLandmarkerResult) {
+        val head = result.headPoint()
+        if (head == null) {
+            headTracker.reset()
+            return
+        }
+
+        val direction = headTracker.update(head.x, head.y, head.scale) ?: return
+
+        val now = SystemClock.elapsedRealtime()
+        if (now - lastHeadFiredAtMs < HEAD_COOLDOWN_MS) return
+        lastHeadFiredAtMs = now
+        lastFaceFiredAtMs = now
+
+        val gesture = when (direction) {
+            Direction.LEFT -> FaceGesture.HEAD_LEFT
+            Direction.RIGHT -> FaceGesture.HEAD_RIGHT
+            Direction.UP -> FaceGesture.HEAD_UP
+            Direction.DOWN -> FaceGesture.HEAD_DOWN
+        }
+        faceMappingStore.load()[gesture]?.let { ActionDispatcher.fire(it) }
+    }
+
+    private fun Direction.toSwipe(): ActionType = when (this) {
+        Direction.LEFT -> ActionType.SWIPE_LEFT
+        Direction.RIGHT -> ActionType.SWIPE_RIGHT
+        Direction.UP -> ActionType.SWIPE_UP
+        Direction.DOWN -> ActionType.SWIPE_DOWN
     }
 
     private fun resetTrackpad() {
-        lastPointPos = null
-        pointHoldStreak = 0
+        trackpadTracker.reset()
+        trackpadTapped = false
+        hidePointer()
+    }
+
+    /**
+     * Moves the on-screen dot to follow the fingertip, and taps where it sits when the finger
+     * holds still.
+     *
+     * Tapping at the pointer rather than the screen centre is the substantive part: the dot makes
+     * the target visible, so tapping anywhere else would contradict what the user can see.
+     */
+    private fun handleAirPointer(rawX: Float, rawY: Float) {
+        val metrics = resources.displayMetrics
+        val targetX = mapToScreen(rawX, metrics.widthPixels)
+        val targetY = mapToScreen(rawY, metrics.heightPixels)
+
+        if (pointerX < 0f) {
+            pointerX = targetX
+            pointerY = targetY
+            pointerAnchorX = targetX
+            pointerAnchorY = targetY
+            pointerStillFrames = 0
+            pointerTapped = false
+        } else {
+            pointerX += POINTER_SMOOTHING * (targetX - pointerX)
+            pointerY += POINTER_SMOOTHING * (targetY - pointerY)
+        }
+
+        val overlay = pointerOverlay ?: PointerOverlay(this).also { pointerOverlay = it }
+        overlay.moveTo(pointerX.toInt(), pointerY.toInt())
+
+        val drift = kotlin.math.hypot(pointerX - pointerAnchorX, pointerY - pointerAnchorY)
+        if (drift > POINTER_TAP_TOLERANCE_PX) {
+            pointerAnchorX = pointerX
+            pointerAnchorY = pointerY
+            pointerStillFrames = 0
+            pointerTapped = false
+            return
+        }
+
+        pointerStillFrames++
+        if (!pointerTapped && pointerStillFrames >= TRACKPAD_HOLD_FRAMES_FOR_TAP) {
+            pointerTapped = true
+            ActionDispatcher.tapAt(pointerX, pointerY)
+        }
+    }
+
+    /** Stretches the comfortable middle band of the camera view across the full screen axis. */
+    private fun mapToScreen(normalized: Float, sizePx: Int): Float {
+        val t = ((normalized - POINTER_ACTIVE_LO) / (POINTER_ACTIVE_HI - POINTER_ACTIVE_LO))
+            .coerceIn(0f, 1f)
+        return t * sizePx
+    }
+
+    private fun hidePointer() {
+        if (pointerX < 0f && pointerOverlay?.isShowing != true) return
+        pointerX = -1f
+        pointerY = -1f
+        pointerStillFrames = 0
+        pointerTapped = false
+        pointerOverlay?.hide()
     }
 
     private fun handlePinchTracking(result: com.google.mediapipe.tasks.vision.handlandmarker.HandLandmarkerResult) {
@@ -379,6 +624,13 @@ class GestureControlService : LifecycleService() {
     }
 
     private fun onFaceResult(result: com.google.mediapipe.tasks.vision.facelandmarker.FaceLandmarkerResult) {
+        // Any visible face lifts the idle throttle — see the hand path.
+        if (result.faceLandmarks().isNotEmpty()) lastSubjectSeenAtMs = SystemClock.elapsedRealtime()
+
+        // Head movement is a continuous motion rather than an expression, so it is tracked
+        // separately and bypasses the blendshape debounce below.
+        handleHeadMotion(result)
+
         // faceSignals() rather than blendshapeMap(): MediaPipe emits 52 blendshape categories and
         // the classifier reads six, so materialising the whole map every frame was waste.
         //

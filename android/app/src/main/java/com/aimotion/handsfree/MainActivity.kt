@@ -6,6 +6,8 @@ import android.content.ComponentName
 import android.content.Context
 import android.content.Intent
 import android.content.pm.PackageManager
+import android.hardware.Sensor
+import android.hardware.SensorManager
 import android.net.Uri
 import android.os.Bundle
 import android.os.PowerManager
@@ -26,6 +28,8 @@ import com.aimotion.handsfree.gesture.GestureMappingStore
 import com.aimotion.handsfree.gesture.GestureToggleStore
 import com.aimotion.handsfree.gesture.AirSensorDeviceAdminReceiver
 import com.aimotion.handsfree.gesture.MAPPABLE_GESTURES
+import com.aimotion.handsfree.gesture.ProximityGesture
+import com.aimotion.handsfree.gesture.ProximityMappingStore
 import com.aimotion.handsfree.overlay.OverlayBubbleService
 import com.aimotion.handsfree.ui.paper.PaperShowcaseActivity
 
@@ -37,6 +41,8 @@ class MainActivity : AppCompatActivity() {
     private lateinit var faceMappingStore: FaceMappingStore
     private lateinit var faceMapping: MutableMap<FaceGesture, GestureAction>
     private lateinit var toggles: GestureToggleStore
+    private lateinit var waveMappingStore: ProximityMappingStore
+    private lateinit var waveMapping: MutableMap<ProximityGesture, GestureAction>
 
     private val requestCamera = registerForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
         refreshStatus()
@@ -53,6 +59,8 @@ class MainActivity : AppCompatActivity() {
         faceMappingStore = FaceMappingStore(this)
         faceMapping = faceMappingStore.load().toMutableMap()
         toggles = GestureToggleStore(this)
+        waveMappingStore = ProximityMappingStore(this)
+        waveMapping = waveMappingStore.load().toMutableMap()
 
         binding.mappingList.layoutManager = LinearLayoutManager(this)
         binding.mappingList.adapter = GestureMappingAdapter(
@@ -84,11 +92,31 @@ class MainActivity : AppCompatActivity() {
             },
         )
 
+        // The adapter is generic over its trigger type, so a third modality reuses it rather than
+        // duplicating a near-identical list.
+        binding.waveMappingList.layoutManager = LinearLayoutManager(this)
+        binding.waveMappingList.adapter = GestureMappingAdapter(
+            triggers = ProximityGesture.entries.toList(),
+            labelOf = { it.label },
+            mapping = waveMapping,
+            onChanged = { _, _ -> waveMappingStore.save(waveMapping) },
+            onChooseApp = { gesture ->
+                showAppPicker(gesture.label) { packageName ->
+                    waveMapping[gesture] = GestureAction(ActionType.LAUNCH_APP, packageName)
+                    waveMappingStore.save(waveMapping)
+                    binding.waveMappingList.adapter?.notifyDataSetChanged()
+                }
+            },
+        )
+
         binding.gestureGuideButton.setOnClickListener {
             startActivity(Intent(this, GestureGuideActivity::class.java))
         }
         binding.gestureMappingComposeButton.setOnClickListener {
             startActivity(Intent(this, GestureMappingComposeActivity::class.java))
+        }
+        binding.sensorListButton.setOnClickListener {
+            startActivity(Intent(this, SensorListActivity::class.java))
         }
         binding.paperShowcaseButton.setOnClickListener {
             startActivity(Intent(this, PaperShowcaseActivity::class.java))
@@ -118,6 +146,19 @@ class MainActivity : AppCompatActivity() {
         binding.faceGestureSwitch.setOnCheckedChangeListener { _, checked ->
             toggles.faceEnabled = checked
             refreshStatus()
+        }
+        binding.pointerSwitch.isChecked = toggles.pointerEnabled
+        binding.pointerSwitch.setOnCheckedChangeListener { _, checked ->
+            toggles.pointerEnabled = checked
+            refreshStatus()
+        }
+        binding.waveGestureSwitch.isChecked = toggles.waveEnabled
+        binding.waveGestureSwitch.setOnCheckedChangeListener { _, checked ->
+            toggles.waveEnabled = checked
+        }
+        binding.batterySaverSwitch.isChecked = toggles.pauseWhenScreenOff
+        binding.batterySaverSwitch.setOnCheckedChangeListener { _, checked ->
+            toggles.pauseWhenScreenOff = checked
         }
         binding.bubbleSwitch.isChecked = toggles.bubbleEnabled
         binding.bubbleSwitch.setOnCheckedChangeListener { _, checked ->
@@ -217,6 +258,24 @@ class MainActivity : AppCompatActivity() {
         binding.openBatteryButton.isEnabled = !batteryOk
         binding.serviceSwitch.isEnabled = cameraOk && a11yOk
         binding.bubbleSwitch.isEnabled = overlayOk
+        // The pointer draws through the same overlay window as the bubble, so without that
+        // permission the switch would turn on and produce nothing visible.
+        binding.pointerSwitch.isEnabled = overlayOk
+        if (!overlayOk) {
+            binding.pointerHintText.text =
+                "Needs the floating bubble permission above before the pointer can be drawn."
+        }
+
+        // Not every phone has a proximity sensor. Say so plainly rather than leaving a switch
+        // that silently does nothing.
+        val hasProximity = (getSystemService(Context.SENSOR_SERVICE) as SensorManager)
+            .getDefaultSensor(Sensor.TYPE_PROXIMITY) != null
+        binding.waveGestureSwitch.isEnabled = hasProximity
+        binding.waveHintText.text = if (hasProximity) {
+            "Uses the proximity sensor instead of the camera — almost no battery, and it still works while the screen is off. Only wave once or twice; it can't see hand shapes."
+        } else {
+            "This phone has no proximity sensor, so wave gestures aren't available here."
+        }
 
         // Spell out the live speed consequence of the two switches, since it isn't obvious that
         // turning one modality off makes the other one react faster.

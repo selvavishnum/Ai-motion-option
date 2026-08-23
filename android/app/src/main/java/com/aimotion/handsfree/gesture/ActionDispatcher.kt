@@ -25,4 +25,9 @@ object ActionDispatcher {
     fun pinch(zoomIn: Boolean) {
         serviceRef?.get()?.pinch(zoomIn)
     }
+
+    /** Taps a specific screen point — used by the air pointer so the tap lands on the dot. */
+    fun tapAt(x: Float, y: Float) {
+        serviceRef?.get()?.tapAt(x, y)
+    }
 }

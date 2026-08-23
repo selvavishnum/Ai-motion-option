@@ -3,6 +3,10 @@ plugins {
     id("org.jetbrains.kotlin.android")
 }
 
+// Deliberately public — see the signingConfigs comment below. Named so that nobody has to
+// wonder whether a bare string literal in a build file was an accident.
+val COMMITTED_KEYSTORE_PASSWORD = "airsensor"
+
 android {
     namespace = "com.aimotion.handsfree"
     compileSdk = 34
@@ -17,11 +21,22 @@ android {
 
     signingConfigs {
         // Release builds need a real (non-debug) signature — some OEM skins (ColorOS/Realme UI,
-        // MIUI, ...) reject sideloaded apps signed with the auto-generated debug key. The
-        // keystore itself is never committed: CI generates one at build time (see
-        // .github/workflows/android-build.yml) and points these env vars at it. Falls back to
-        // the debug keystore for local `./gradlew assembleRelease` runs with no env vars set.
+        // MIUI, ...) reject sideloaded apps signed with the auto-generated debug key.
+        //
+        // The keystore is committed, and its password is in this file on purpose. CI used to
+        // generate a throwaway key per build, which meant every APK was signed differently and
+        // Android refused to install one over another: updating required uninstalling first,
+        // which wipes every saved gesture mapping. A stable key is what makes an update an
+        // update.
+        //
+        // This is NOT a secret and must not be treated as one. Anyone with the repo can sign an
+        // APK that Android will accept as an update to this app, so the trade is only reasonable
+        // because this is a personally sideloaded app that is not distributed through any store.
+        // Publishing it anywhere real means generating a private key, keeping it out of the repo,
+        // and supplying it through the RELEASE_KEYSTORE_* environment variables below.
         create("release") {
+            // Environment variables win when set, so a private key can be supplied by CI later
+            // without touching this file.
             val keystorePath = System.getenv("RELEASE_KEYSTORE_PATH")
             if (keystorePath != null) {
                 storeFile = file(keystorePath)
@@ -29,10 +44,10 @@ android {
                 keyAlias = System.getenv("RELEASE_KEY_ALIAS")
                 keyPassword = System.getenv("RELEASE_KEY_PASSWORD")
             } else {
-                storeFile = signingConfigs.getByName("debug").storeFile
-                storePassword = signingConfigs.getByName("debug").storePassword
-                keyAlias = signingConfigs.getByName("debug").keyAlias
-                keyPassword = signingConfigs.getByName("debug").keyPassword
+                storeFile = file("airsensor-release.keystore")
+                storePassword = COMMITTED_KEYSTORE_PASSWORD
+                keyAlias = "airsensor"
+                keyPassword = COMMITTED_KEYSTORE_PASSWORD
             }
         }
     }

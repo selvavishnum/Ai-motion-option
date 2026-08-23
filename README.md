@@ -276,3 +276,80 @@ apps with Play Protect"**, install, then turn scanning back on.
 cd android
 ./gradlew assembleDebug   # needs the Android SDK; see android/app/build.gradle.kts for versions
 ```
+
+### Battery
+
+The camera is the dominant cost — there is no low-power gesture sensor to fall back on, so the
+front camera runs and every frame is fed to an on-device model. Three things keep that in check,
+two of them automatic:
+
+- **Idle throttling (automatic).** Most of the day nothing is in front of the phone. After five
+  seconds with no hand or face visible the loop drops from ~16 fps to ~3 fps, and snaps back the
+  instant a hand or face appears — before you have even formed a pose. The only cost is up to one
+  extra 300ms before the first gesture of a session registers.
+- **Screen-off release (setting, on by default).** With the screen off the phone is usually
+  pocketed or face down, so the camera films nothing. **Save battery when screen is off** unbinds
+  the camera entirely, letting the hardware power down; merely skipping frames would not, since
+  the sensor keeps streaming either way. The trade-off is that no gesture can wake the screen
+  while nothing is watching, so turn it off if you rely on palm-to-wake.
+- **Switch off the modality you don't use.** Air and Face detection each cost a model inference.
+  Turning one off halves the work — and makes the other roughly twice as fast to react.
+
+Battery-optimisation exemption is still worth granting: it stops OEM battery managers
+(ColorOS/Realme UI, MIUI) from killing the service outright, which is a reliability setting, not
+a power one.
+
+### Wave gestures — no camera
+
+The proximity sensor (the one that blanks the screen during a call) can detect a hand passing
+over the top of the phone. That gives a **third, camera-free trigger modality**, enabled with
+**Wave gestures (no camera)**:
+
+| Wave | Default action |
+| ---- | -------------- |
+| Wave once | Wake screen |
+| Wave twice | Home |
+
+Both are remappable, in their own section of the mapping list.
+
+**It is deliberately tiny, because the hardware genuinely cannot do more.** The sensor reports
+one thing — something is near, or nothing is near. There is no shape, no direction, no usable
+distance. Palm vs fist, scroll direction, pinch and every face gesture need the camera; nothing
+on the phone can substitute for actually seeing your hand.
+
+What it buys instead is power and coverage:
+
+- It is hardware-triggered and costs a fraction of a milliamp, against the camera's continuous
+  capture plus model inference.
+- It keeps working while the screen is off — exactly the window where the camera is released to
+  save battery. So *wave to wake the screen* still works with **Save battery when screen is off**
+  enabled, which would otherwise be a straight choice between the two.
+
+Holding your hand over the sensor does nothing on purpose: anything covered for more than ~1.2s
+is a pocket, a face-down phone or a call, not a gesture. Without that guard the mode would fire
+constantly in a pocket.
+
+If the phone has no proximity sensor the switch is disabled and says so.
+
+### Updating without losing your settings
+
+The release APK is signed with a **committed keystore** (`android/app/airsensor-release.keystore`,
+password in `app/build.gradle.kts`). That is deliberate, and worth explaining because committing a
+signing key is normally wrong.
+
+CI previously generated a throwaway key on every run. Every APK was therefore signed differently,
+and Android refuses to install one build over another when the signature changes
+(`INSTALL_FAILED_UPDATE_INCOMPATIBLE`, surfaced as a bare "App not installed"). Updating meant
+uninstalling first — which deletes every saved gesture mapping and permission grant. A stable key
+is what makes an update actually an update.
+
+**This key is not a secret.** Anyone with the repository can produce an APK that Android will
+accept as an update to this app. That trade is only acceptable because this is a personally
+sideloaded app distributed through nothing. If this were ever published properly, generate a
+private key, keep it out of the repository, and pass it in through the `RELEASE_KEYSTORE_PATH`,
+`RELEASE_KEYSTORE_PASSWORD`, `RELEASE_KEY_ALIAS` and `RELEASE_KEY_PASSWORD` environment variables,
+which still take precedence over the committed one.
+
+One-time step: because builds before this change were signed with a different (random) key, the
+**first** install after it still needs an uninstall. Every update after that installs cleanly over
+the top.

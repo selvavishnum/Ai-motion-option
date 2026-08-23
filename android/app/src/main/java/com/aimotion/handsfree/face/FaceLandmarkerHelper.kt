@@ -135,6 +135,34 @@ private const val RIGHT_EYE_CORNER_A = 263
 private const val RIGHT_EYE_CORNER_B = 362
 private const val RIGHT_IRIS_CENTER = 473
 
+/** Nose-tip index in the 478-point mesh, used as the head's position. */
+private const val NOSE_TIP = 1
+
+/**
+ * Where the head is, plus a scale reference.
+ *
+ * @param scale distance between the outer eye corners. Dividing displacement by this makes head
+ *   movement mean the same thing whether you're sitting close to the phone or holding it at
+ *   arm's length — without it, the same real movement registers as several times larger up close.
+ */
+data class HeadPoint(val x: Float, val y: Float, val scale: Float)
+
+/** The head's current position, or null when no face is visible. Tracked as *movement* rather
+ * than a pose: it's the change in this point over time that becomes a gesture. */
+fun FaceLandmarkerResult.headPoint(): HeadPoint? {
+    val landmarks = faceLandmarks().firstOrNull() ?: return null
+    if (landmarks.size <= RIGHT_EYE_CORNER_A) return null
+
+    val nose = landmarks[NOSE_TIP]
+    val leftCorner = landmarks[LEFT_EYE_CORNER_A]
+    val rightCorner = landmarks[RIGHT_EYE_CORNER_A]
+    val dx = rightCorner.x() - leftCorner.x()
+    val dy = rightCorner.y() - leftCorner.y()
+    val scale = kotlin.math.sqrt(dx * dx + dy * dy)
+
+    return HeadPoint(nose.x(), nose.y(), scale)
+}
+
 /** Signed, eye-width-normalized average horizontal iris offset across both eyes (see
  * [classifyGaze]), or null if the face/expected landmark indices aren't present. */
 fun FaceLandmarkerResult.gazeOffset(): Float? {

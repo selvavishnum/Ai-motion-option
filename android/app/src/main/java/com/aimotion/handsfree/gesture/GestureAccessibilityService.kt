@@ -150,7 +150,24 @@ class GestureAccessibilityService : AccessibilityService() {
 
     private fun tap() {
         val (width, height) = screenSize()
-        val path = Path().apply { moveTo(width / 2f, height / 2f) }
+        tapAt(width / 2f, height / 2f)
+    }
+
+    /**
+     * Taps a specific point rather than the middle of the screen.
+     *
+     * Screen-centre tapping is a reasonable default when nothing knows where the user means, but
+     * with the air pointer on screen the intended target is known exactly — and tapping somewhere
+     * other than the visible dot would be actively misleading.
+     */
+    fun tapAt(x: Float, y: Float) {
+        val (width, height) = screenSize()
+        val path = Path().apply {
+            // Clamped: dispatchGesture silently rejects the whole gesture if any point falls
+            // outside the display, and a fingertip at the very edge of the camera frame can map
+            // just past it.
+            moveTo(x.coerceIn(0f, width - 1f), y.coerceIn(0f, height - 1f))
+        }
         dispatchGesture(
             GestureDescription.Builder()
                 .addStroke(GestureDescription.StrokeDescription(path, 0, TAP_DURATION_MS))

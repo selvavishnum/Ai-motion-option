@@ -30,24 +30,12 @@ jobs:
           chmod +x ./gradlew
           ./gradlew assembleDebug --no-daemon
 
-      - name: Generate release signing key
-        run: |
-          keytool -genkeypair -v \
-            -keystore "$RUNNER_TEMP/release.keystore" \
-            -alias handsfree -keyalg RSA -keysize 2048 -validity 10950 \
-            -storepass "$RELEASE_KEYSTORE_PASSWORD" -keypass "$RELEASE_KEY_PASSWORD" \
-            -dname "CN=Hands-Free Gestures, OU=Dev, O=Ai-motion-option, C=IN"
-        env:
-          RELEASE_KEYSTORE_PASSWORD: ${{ github.run_id }}handsfree
-          RELEASE_KEY_PASSWORD: ${{ github.run_id }}handsfree
-
+      # No keystore generation here any more. CI used to mint a fresh key on every run,
+      # which signed each APK differently and made "install over the previous build" fail with
+      # INSTALL_FAILED_UPDATE_INCOMPATIBLE — forcing an uninstall that wiped saved settings.
+      # The committed keystore in android/app/ is used instead; see app/build.gradle.kts.
       - name: Build release APK
         run: ./gradlew assembleRelease --no-daemon
-        env:
-          RELEASE_KEYSTORE_PATH: ${{ runner.temp }}/release.keystore
-          RELEASE_KEYSTORE_PASSWORD: ${{ github.run_id }}handsfree
-          RELEASE_KEY_ALIAS: handsfree
-          RELEASE_KEY_PASSWORD: ${{ github.run_id }}handsfree
 
       - uses: actions/upload-artifact@v4
         with:

@@ -43,6 +43,14 @@
             android:layout_marginTop="8dp"
             android:text="Paper design system" />
 
+        <Button
+            android:id="@+id/sensorListButton"
+            style="@style/Widget.MaterialComponents.Button.OutlinedButton"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="8dp"
+            android:text="What sensors does this phone have?" />
+
         <TextView
             android:id="@+id/statusText"
             android:layout_width="wrap_content"
@@ -128,6 +136,56 @@
             android:textColor="@color/onSurface" />
 
         <com.google.android.material.switchmaterial.SwitchMaterial
+            android:id="@+id/pointerSwitch"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="4dp"
+            android:text="Air pointer (blue dot)"
+            android:textColor="@color/onSurface" />
+
+        <TextView
+            android:id="@+id/pointerHintText"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="2dp"
+            android:text="A blue dot follows your pointed finger, and holding still taps exactly where the dot is. Replaces finger swipe/scroll while it's on. Needs the floating bubble permission."
+            android:textColor="@color/muted"
+            android:textSize="12sp" />
+
+        <com.google.android.material.switchmaterial.SwitchMaterial
+            android:id="@+id/waveGestureSwitch"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="4dp"
+            android:text="Wave gestures (no camera)"
+            android:textColor="@color/onSurface" />
+
+        <TextView
+            android:id="@+id/waveHintText"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="2dp"
+            android:text="Uses the proximity sensor instead of the camera — almost no battery, and it still works while the screen is off. Only wave once or twice; it can't see hand shapes."
+            android:textColor="@color/muted"
+            android:textSize="12sp" />
+
+        <com.google.android.material.switchmaterial.SwitchMaterial
+            android:id="@+id/batterySaverSwitch"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="4dp"
+            android:text="Save battery when screen is off"
+            android:textColor="@color/onSurface" />
+
+        <TextView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="2dp"
+            android:text="Turns the camera off while your screen is off — the biggest battery saving. Gestures then can't wake the screen; switch this off if you need that."
+            android:textColor="@color/muted"
+            android:textSize="12sp" />
+
+        <com.google.android.material.switchmaterial.SwitchMaterial
             android:id="@+id/bubbleSwitch"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
@@ -195,6 +253,30 @@
 
         <androidx.recyclerview.widget.RecyclerView
             android:id="@+id/faceMappingList"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="8dp"
+            android:nestedScrollingEnabled="false" />
+
+        <TextView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="24dp"
+            android:text="Wave gesture mapping"
+            android:textColor="@color/onSurface"
+            android:textSize="18sp"
+            android:textStyle="bold" />
+
+        <TextView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="2dp"
+            android:text="Wave your hand over the top of the phone, near the earpiece. Hold it there and nothing happens — that's a pocket, not a wave."
+            android:textColor="@color/muted"
+            android:textSize="12sp" />
+
+        <androidx.recyclerview.widget.RecyclerView
+            android:id="@+id/waveMappingList"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:layout_marginTop="8dp"
