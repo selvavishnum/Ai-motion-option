@@ -132,6 +132,13 @@ one-time model download. Targets Android 12+ (`minSdk 31`).
   screen.
 - An optional **floating status bubble** (the "draw over other apps" permission) confirms the
   service is watching and gives a one-tap way back into the app, from anywhere.
+- A **Quick Settings tile** ("Air gestures") switches detection on and off from the pull-down
+  shade, next to Wi-Fi and Torch — no need to open the app. Tap **Add Quick Settings tile** in
+  the app to have Android offer to place it (Android 13+; on Android 12, add it by hand from
+  the shade's edit screen). The tile mirrors the service's real state rather than its own, so
+  it stays correct when the service is started from the app or stopped by the system, and it
+  greys out as *Setup needed* until Camera and Accessibility are granted. Adding the tile does
+  not grant anything: it is only a switch for what the app already has permission to do.
 - The app can request exemption from OEM battery optimization, which otherwise tends to kill
   background services on skins like ColorOS/Realme UI and MIUI.
 

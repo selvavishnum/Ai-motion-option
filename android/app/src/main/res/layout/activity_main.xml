@@ -119,6 +119,23 @@
             android:text="Gesture control running"
             android:textColor="@color/onSurface" />
 
+        <Button
+            android:id="@+id/addTileButton"
+            style="@style/Widget.MaterialComponents.Button.OutlinedButton"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="8dp"
+            android:text="Add Quick Settings tile" />
+
+        <TextView
+            android:id="@+id/tileHintText"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="4dp"
+            android:text="Puts an Air gestures toggle in the pull-down shade, next to Wi-Fi and Torch."
+            android:textColor="@color/muted"
+            android:textSize="12sp" />
+
         <com.google.android.material.switchmaterial.SwitchMaterial
             android:id="@+id/handGestureSwitch"
             android:layout_width="match_parent"

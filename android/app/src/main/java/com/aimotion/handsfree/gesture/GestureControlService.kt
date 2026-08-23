@@ -182,6 +182,9 @@ class GestureControlService : LifecycleService() {
         // MainActivity happens to be open — a no-op if the overlay permission isn't granted,
         // and skipped entirely when the user has hidden the dot.
         if (toggles.bubbleEnabled) OverlayBubbleService.start(this)
+        // Last, so the flag only ever means "set up and watching". If anything above throws, the
+        // service never reports itself running and the tile stays off — which is the truth.
+        setRunning(true)
     }
 
     /**
@@ -232,6 +235,7 @@ class GestureControlService : LifecycleService() {
 
     override fun onDestroy() {
         super.onDestroy()
+        setRunning(false)
         runCatching { unregisterReceiver(screenStateReceiver) }
         proximityDetector?.stop()
         proximityDetector = null
@@ -705,7 +709,26 @@ class GestureControlService : LifecycleService() {
             .build()
     }
 
+    /** Kept next to the flag so no caller can flip it without the tile being told. */
+    private fun setRunning(running: Boolean) {
+        isRunning = running
+        GestureTileService.requestUpdate(this)
+    }
+
     companion object {
+        /**
+         * Whether an instance is alive. Android offers no supported way to ask "is my service
+         * running" — `getRunningServices` is deprecated and returns only this app's services on
+         * modern releases — so the service reports it itself. The process hosts exactly one
+         * instance, and if the process dies the flag dies with it, which is the right answer.
+         *
+         * Volatile because the Quick Settings tile reads it on the main thread while onCreate /
+         * onDestroy may be running from a different one.
+         */
+        @Volatile
+        var isRunning: Boolean = false
+            private set
+
         fun start(context: Context) {
             ContextCompat.startForegroundService(context, Intent(context, GestureControlService::class.java))
         }

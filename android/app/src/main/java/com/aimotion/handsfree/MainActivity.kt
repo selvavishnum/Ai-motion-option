@@ -5,17 +5,18 @@ import android.app.admin.DevicePolicyManager
 import android.content.ComponentName
 import android.content.Context
 import android.content.Intent
-import android.content.pm.PackageManager
 import android.hardware.Sensor
 import android.hardware.SensorManager
+import android.graphics.drawable.Icon
 import android.net.Uri
+import android.os.Build
 import android.os.Bundle
 import android.os.PowerManager
 import android.provider.Settings
-import android.text.TextUtils
+import android.app.StatusBarManager
+import android.widget.CompoundButton
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.appcompat.app.AppCompatActivity
-import androidx.core.content.ContextCompat
 import androidx.recyclerview.widget.LinearLayoutManager
 import com.aimotion.handsfree.databinding.ActivityMainBinding
 import com.aimotion.handsfree.face.FaceGesture
@@ -25,11 +26,13 @@ import com.aimotion.handsfree.gesture.Gesture
 import com.aimotion.handsfree.gesture.GestureAction
 import com.aimotion.handsfree.gesture.GestureControlService
 import com.aimotion.handsfree.gesture.GestureMappingStore
+import com.aimotion.handsfree.gesture.GestureTileService
 import com.aimotion.handsfree.gesture.GestureToggleStore
 import com.aimotion.handsfree.gesture.AirSensorDeviceAdminReceiver
 import com.aimotion.handsfree.gesture.MAPPABLE_GESTURES
 import com.aimotion.handsfree.gesture.ProximityGesture
 import com.aimotion.handsfree.gesture.ProximityMappingStore
+import com.aimotion.handsfree.gesture.ServicePrerequisites
 import com.aimotion.handsfree.overlay.OverlayBubbleService
 import com.aimotion.handsfree.ui.paper.PaperShowcaseActivity
 
@@ -43,6 +46,13 @@ class MainActivity : AppCompatActivity() {
     private lateinit var toggles: GestureToggleStore
     private lateinit var waveMappingStore: ProximityMappingStore
     private lateinit var waveMapping: MutableMap<ProximityGesture, GestureAction>
+
+    /** Held as a field so [refreshStatus] can detach it while writing the switch's state. Setting
+     * isChecked fires the listener, which would start or stop the service as a side effect of
+     * merely *displaying* what it is already doing. */
+    private val serviceSwitchListener = CompoundButton.OnCheckedChangeListener { _, checked ->
+        if (checked) maybeStartService() else GestureControlService.stop(this)
+    }
 
     private val requestCamera = registerForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
         refreshStatus()
@@ -134,6 +144,7 @@ class MainActivity : AppCompatActivity() {
             @Suppress("BatteryLife")
             startActivity(Intent(Settings.ACTION_REQUEST_IGNORE_BATTERY_OPTIMIZATIONS, Uri.parse("package:$packageName")))
         }
+        binding.addTileButton.setOnClickListener { requestAddQuickSettingsTile() }
         binding.restrictedSettingsButton.setOnClickListener { showRestrictedSettingsHelp() }
         binding.deviceAdminButton.setOnClickListener { requestDeviceAdmin() }
 
@@ -165,9 +176,7 @@ class MainActivity : AppCompatActivity() {
             toggles.bubbleEnabled = checked
             if (checked) OverlayBubbleService.start(this) else OverlayBubbleService.stop(this)
         }
-        binding.serviceSwitch.setOnCheckedChangeListener { _, checked ->
-            if (checked) maybeStartService() else GestureControlService.stop(this)
-        }
+        binding.serviceSwitch.setOnCheckedChangeListener(serviceSwitchListener)
     }
 
     override fun onResume() {
@@ -180,19 +189,12 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
-    private fun hasCameraPermission() =
-        ContextCompat.checkSelfPermission(this, Manifest.permission.CAMERA) == PackageManager.PERMISSION_GRANTED
+    // Both questions moved to ServicePrerequisites so the Quick Settings tile asks them the same
+    // way; a second copy of the accessibility-list parsing was exactly the kind of thing that
+    // drifts.
+    private fun hasCameraPermission() = ServicePrerequisites.hasCameraPermission(this)
 
-    private fun isAccessibilityServiceEnabled(): Boolean {
-        val expected = "$packageName/com.aimotion.handsfree.gesture.GestureAccessibilityService"
-        val enabled = Settings.Secure.getString(contentResolver, Settings.Secure.ENABLED_ACCESSIBILITY_SERVICES)
-            ?: return false
-        val splitter = TextUtils.SimpleStringSplitter(':').apply { setString(enabled) }
-        while (splitter.hasNext()) {
-            if (splitter.next() == expected) return true
-        }
-        return false
-    }
+    private fun isAccessibilityServiceEnabled() = ServicePrerequisites.isAccessibilityServiceEnabled(this)
 
     private fun deviceAdminComponent() = ComponentName(this, AirSensorDeviceAdminReceiver::class.java)
 
@@ -257,6 +259,12 @@ class MainActivity : AppCompatActivity() {
         binding.openOverlayButton.isEnabled = !overlayOk
         binding.openBatteryButton.isEnabled = !batteryOk
         binding.serviceSwitch.isEnabled = cameraOk && a11yOk
+        // Reflect what the service is actually doing, not what this screen last asked for: it can
+        // now also be toggled from the Quick Settings tile, and it could have been stopped by the
+        // system while the app was in the background.
+        binding.serviceSwitch.setOnCheckedChangeListener(null)
+        binding.serviceSwitch.isChecked = GestureControlService.isRunning
+        binding.serviceSwitch.setOnCheckedChangeListener(serviceSwitchListener)
         binding.bubbleSwitch.isEnabled = overlayOk
         // The pointer draws through the same overlay window as the bubble, so without that
         // permission the switch would turn on and produce nothing visible.
@@ -288,6 +296,35 @@ class MainActivity : AppCompatActivity() {
                 "Face only: every camera frame goes to face detection — fastest face-gesture response."
             else ->
                 "Both off — nothing will be detected. Turn at least one on."
+        }
+    }
+
+    /**
+     * Android 13+ can ask the user to add a tile with a single dialog. Before that the only route
+     * was the shade's own edit screen — findable, but a worse first experience than a button that
+     * says what it does. On Android 12 the button explains that route instead of doing nothing.
+     */
+    private fun requestAddQuickSettingsTile() {
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.TIRAMISU) {
+            android.app.AlertDialog.Builder(this)
+                .setTitle("Add the tile by hand")
+                .setMessage(
+                    "Pull down the notification shade, tap the pencil or ✎ / edit button, then " +
+                        "drag the \"Air gestures\" tile up into the active row."
+                )
+                .setPositiveButton("Got it", null)
+                .show()
+            return
+        }
+        val statusBar = getSystemService(StatusBarManager::class.java)
+        statusBar.requestAddTileService(
+            ComponentName(this, GestureTileService::class.java),
+            getString(R.string.tile_label),
+            Icon.createWithResource(this, R.drawable.ic_tile_air_sensor),
+            mainExecutor,
+        ) {
+            // The system already shows its own dialog and its own confirmation; there is nothing
+            // useful to add on top of it, whichever way the user answered.
         }
     }
 

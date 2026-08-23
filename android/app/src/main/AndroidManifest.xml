@@ -69,6 +69,23 @@
             android:name=".overlay.OverlayBubbleService"
             android:exported="false" />
 
+        <!-- Quick Settings tile, so gestures can be switched on from the notification shade
+             without opening the app. Must be exported and hold BIND_QUICK_SETTINGS_TILE: System
+             UI binds it, and that permission is what stops anything else from doing so. -->
+        <service
+            android:name=".gesture.GestureTileService"
+            android:label="@string/tile_label"
+            android:icon="@drawable/ic_tile_air_sensor"
+            android:permission="android.permission.BIND_QUICK_SETTINGS_TILE"
+            android:exported="true">
+            <intent-filter>
+                <action android:name="android.service.quicksettings.action.QS_TILE" />
+            </intent-filter>
+            <!-- Deliberately NOT declaring TOGGLEABLE_TILE: that would let the tile be switched
+                 on from the lock screen without unlocking, and this one starts a service that
+                 drives the accessibility APIs. Requiring an unlock first costs one swipe. -->
+        </service>
+
         <!-- Force-lock device admin, used only by the "screen off" gesture (see
              AirSensorDeviceAdminReceiver). Inert until the user activates it in Settings. -->
         <receiver

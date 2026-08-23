@@ -3,4 +3,10 @@
     <string name="accessibility_service_description">Lets air-gestures detected via the front camera control other apps system-wide: swipe, pinch to zoom, tap, back, home, open recents, and launching apps.</string>
     <string name="notification_channel_name">Gesture control running</string>
     <string name="notification_text">Watching for hand gestures</string>
+    <!-- Quick Settings tile. The label is what appears under the tile in the shade, so it has
+         to fit two short lines on a phone. -->
+    <string name="tile_label">Air gestures</string>
+    <string name="tile_subtitle_on">On</string>
+    <string name="tile_subtitle_off">Off</string>
+    <string name="tile_subtitle_setup">Setup needed</string>
 </resources>
