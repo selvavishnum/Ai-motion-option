@@ -27,6 +27,7 @@ import com.aimotion.handsfree.gesture.GestureToggleStore
 import com.aimotion.handsfree.gesture.AirSensorDeviceAdminReceiver
 import com.aimotion.handsfree.gesture.MAPPABLE_GESTURES
 import com.aimotion.handsfree.overlay.OverlayBubbleService
+import com.aimotion.handsfree.ui.paper.PaperShowcaseActivity
 
 class MainActivity : AppCompatActivity() {
 
@@ -88,6 +89,9 @@ class MainActivity : AppCompatActivity() {
         }
         binding.gestureMappingComposeButton.setOnClickListener {
             startActivity(Intent(this, GestureMappingComposeActivity::class.java))
+        }
+        binding.paperShowcaseButton.setOnClickListener {
+            startActivity(Intent(this, PaperShowcaseActivity::class.java))
         }
         binding.grantCameraButton.setOnClickListener {
             requestCamera.launch(Manifest.permission.CAMERA)
