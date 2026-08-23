@@ -212,10 +212,23 @@ to perform it, and its current mapped action.
   screen off (device admin)** and accept a deliberately scary-looking system dialog. The policy
   file requests *force-lock only*: no data wipe, no password control. Without the grant the
   gesture is a silent no-op. Revoke any time in Settings → Security → Device admin apps.
-- **The "install unknown sources" / overlay warning on banking apps is not a bug.** Android
-  deliberately blocks overlay windows (and warns about them) on screens a banking/finance app
-  marks as secure, to stop tapjacking-style attacks — the exact pattern used by overlay
-  malware. This app does not attempt to bypass that protection, and won't.
+- **Banking and UPI apps will refuse to pay while gesture control is on. That is correct, and
+  it is not a bug.** Google Pay, PhonePe, Paytm and bank apps check, before every payment,
+  whether an accessibility service is enabled or a window is drawn over the screen — and refuse
+  with something like *"Your payment is declined for security reasons."* if either is true. The
+  reason is straightforward: an accessibility service can read the screen and inject taps, and
+  an overlay can cover the real PIN pad with a fake one. That is precisely how UPI-fraud apps
+  drain accounts, and the payment app cannot tell Air Sensor apart from one. Air Sensor asks
+  for both of those permissions, so it trips the check.
+
+  **To pay: switch gestures off, pay, switch them back on.** The Quick Settings tile makes this
+  two taps. If a payment is still declined with the service stopped, also turn off the floating
+  bubble in the app, and if it *still* declines, turn Air Sensor's Accessibility permission off
+  in Settings → Accessibility for the duration — some apps check whether the permission is
+  granted at all, not just whether the service is running.
+
+  This app does not attempt to bypass that protection, and won't. Anything that hid Air Sensor
+  from those checks would be, functionally, exactly the technique overlay malware uses.
 - **Latency is tuned per gesture, and is not literally zero.** Camera exposure, model
   inference, and gesture dispatch each cost real milliseconds. What's controllable is the frame
   budget, and that dominates everything: the debounce counts *frames*, so the frame rate sets
