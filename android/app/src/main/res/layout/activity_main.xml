@@ -72,6 +72,22 @@
             android:layout_marginTop="8dp"
             android:text="Ignore battery optimization (recommended)" />
 
+        <Button
+            android:id="@+id/restrictedSettingsButton"
+            style="@style/Widget.MaterialComponents.Button.OutlinedButton"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="8dp"
+            android:text="Got &quot;App was denied access&quot;? Fix it" />
+
+        <TextView
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="4dp"
+            android:text="Android blocks Accessibility and the floating bubble for apps installed outside an app store. You unlock it once by hand — tap above for the exact steps."
+            android:textColor="@color/muted"
+            android:textSize="12sp" />
+
         <com.google.android.material.switchmaterial.SwitchMaterial
             android:id="@+id/serviceSwitch"
             android:layout_width="match_parent"
@@ -125,7 +141,7 @@
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
             android:layout_marginTop="2dp"
-            android:text="Blink, raised eyebrows, open mouth, or a smile — detected the same way as hand poses."
+            android:text="Blink, wink one eye, raise or lower your eyebrows, look left/right, open your mouth, or smile — detected the same way as hand poses."
             android:textColor="@color/muted"
             android:textSize="12sp" />
 

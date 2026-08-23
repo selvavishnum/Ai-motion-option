@@ -115,7 +115,10 @@ one-time model download. Targets Android 12+ (`minSdk 31`).
 ### How it works
 
 - **CameraX** captures the front camera in a foreground service, continuously, even while
-  another app is in the foreground.
+  another app is in the foreground. Each frame is rotated upright and mirrored before
+  detection — the sensor buffer arrives rotated 90° on a phone held normally, and the hand
+  classifier reads finger positions off the image axes, so an uncorrected frame turns every
+  hand pose into "unknown".
 - **MediaPipe Hand Landmarker** (on-device) finds hand landmarks in each frame; the same
   rule-based classifier as `app/gesture.py`, ported to Kotlin (`gesture/Gesture.kt`), turns
   them into a gesture. Thumb/index-tip distance is tracked continuously across frames for
@@ -202,10 +205,11 @@ to perform it, and its current mapped action.
   trackpad, pinch-zoom) use a short debounce so they feel closer to real-time. Discrete
   high-impact actions (Home, Back, wake) keep a slightly longer debounce/cooldown so an
   accidental half-second pose doesn't misfire them.
-- **Gaze (look left/right) and air-trackpad turn/scroll direction are best-effort.** Both are
-  computed from raw landmark positions rather than a pre-trained classifier, so their sign
-  (which way is "left") can vary slightly by camera/mirroring setup. If either feels reversed
-  on your device, that's a one-line fix — report which one and which direction is wrong.
+- **Gaze (look left/right) and air-trackpad direction follow a mirror, not the raw camera.**
+  Camera frames are rotated upright and flipped horizontally before detection, so the frame
+  matches what you'd see in a mirror: move your hand to *your* right and it swipes right. Both
+  signals are computed from raw landmark positions rather than a trained classifier, so if
+  either still reads reversed on your device it's a one-line sign flip — say which one.
 
 ### Install it (no computer needed)
 
@@ -224,10 +228,23 @@ Every push to `main` under `android/` auto-builds via GitHub Actions
    apps" for your browser/file manager the first time — allow it. On ColorOS/Realme UI:
    **Settings → Additional Settings → Privacy → Special app access → Install unknown apps**
    → pick the app you're installing from → allow it there specifically.
-3. If **Turn on Accessibility permission** or **Allow floating status bubble** shows "App was
-   denied access" with no toggle: Android 13+ blocks these "restricted settings" by default for
-   any app installed outside the Play Store. Go to **Settings → Apps → Air Sensor → ⋮ (top
-   right) → Allow restricted settings**, then try again — one-time per install.
+3. If **Turn on Accessibility permission** or **Allow floating status bubble** shows
+   **"App was denied access"**, that's Android's *Restricted settings* gate: Android 13+ blocks
+   both permissions for any app installed outside an app store. It is an OS security control, so
+   no app — including this one — can turn it off for itself; you unlock it once, by hand. The
+   catch is that the block appears on the Accessibility/overlay screens while the unlock lives on
+   the app's own **App info** page, so the in-app **Got "App was denied access"? Fix it** button
+   takes you straight there with the steps:
+
+   **Settings → Apps → App management → Air Sensor → ⋮ (top right) → Allow restricted settings**
+
+   Then come back and grant Accessibility and the bubble. One-time per install. If that menu item
+   isn't there at all (some ColorOS/MIUI builds hide it), the only remaining route is ADB from a
+   computer:
+
+   ```bash
+   adb shell appops set com.aimotion.handsfree ACCESS_RESTRICTED_SETTINGS allow
+   ```
 4. Grant camera + Accessibility, then optionally **Allow floating status bubble** and
    **Ignore battery optimization** (recommended so the background service survives OEM
    battery managers).

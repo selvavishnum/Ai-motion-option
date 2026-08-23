@@ -6,6 +6,7 @@ import android.app.PendingIntent
 import android.content.Context
 import android.content.Intent
 import android.graphics.Bitmap
+import android.graphics.Matrix
 import android.os.Build
 import android.os.SystemClock
 import android.util.Log
@@ -83,19 +84,44 @@ class GestureControlService : LifecycleService() {
         mappingStore = GestureMappingStore(this)
         faceMappingStore = FaceMappingStore(this)
         startForeground(NOTIFICATION_ID, buildNotification())
-        handLandmarkerHelper = HandLandmarkerHelper(this) { result -> onLandmarkResult(result) }
-        faceLandmarkerHelper = FaceLandmarkerHelper(this) { result -> onFaceResult(result) }
+        initDetectorsAsync()
         startCamera()
         // Ensure the status bubble is showing whenever gesture control is, not only when
         // MainActivity happens to be open — a no-op if the overlay permission isn't granted.
         OverlayBubbleService.start(this)
     }
 
+    /** Each helper downloads its model file the first time it's constructed — blocking network
+     * I/O, which is illegal on the main thread (StrictMode ends the process with
+     * NetworkOnMainThreadException). Building them here used to happen inline in [onCreate], so
+     * on a fresh install the service died before it ever read a frame. Constructing them on
+     * [analysisExecutor] fixes that and needs no locking: it is single-threaded and
+     * [analyzeFrame] runs on it too, so this task always completes before the first frame. */
+    private fun initDetectorsAsync() {
+        analysisExecutor.execute {
+            try {
+                handLandmarkerHelper = HandLandmarkerHelper(this) { result -> onLandmarkResult(result) }
+                faceLandmarkerHelper = FaceLandmarkerHelper(this) { result -> onFaceResult(result) }
+            } catch (e: Exception) {
+                // Usually "first run with no connectivity". Frames then no-op until the service
+                // is restarted with a network, instead of taking the whole process down.
+                Log.e(TAG, "failed to initialise detectors", e)
+            }
+        }
+    }
+
     override fun onDestroy() {
         super.onDestroy()
         cameraProvider?.unbindAll()
-        handLandmarkerHelper?.close()
-        faceLandmarkerHelper?.close()
+        // Queued rather than closed inline: the helpers are owned by analysisExecutor (see
+        // initDetectorsAsync), and stopping mid-download would otherwise leak a landmarker that
+        // hadn't been assigned yet. shutdown() still lets this last task run.
+        analysisExecutor.execute {
+            handLandmarkerHelper?.close()
+            faceLandmarkerHelper?.close()
+            handLandmarkerHelper = null
+            faceLandmarkerHelper = null
+        }
         analysisExecutor.shutdown()
     }
 
@@ -132,7 +158,11 @@ class GestureControlService : LifecycleService() {
             return
         }
         lastFrameAtMs = now
-        val bitmap: Bitmap = imageProxy.toBitmap()
+        val bitmap: Bitmap = try {
+            imageProxy.toUprightMirroredBitmap()
+        } finally {
+            imageProxy.close()
+        }
         // Alternate hand/face detection per frame rather than running both models every frame —
         // keeps per-frame cost down on mid-range phones while still updating each ~2-3x/sec,
         // plenty for discrete gesture/expression debouncing.
@@ -142,7 +172,27 @@ class GestureControlService : LifecycleService() {
         } else {
             faceLandmarkerHelper?.detectAsync(bitmap, now)
         }
-        imageProxy.close()
+    }
+
+    /** CameraX hands back the raw sensor buffer, and [ImageProxy.toBitmap] does **not** apply
+     * [androidx.camera.core.ImageInfo.rotationDegrees] — so on a phone held upright the frame
+     * arrives rotated 90°. That silently broke every hand gesture: the classifier decides a
+     * finger is "extended" by comparing its tip against its knuckle on the image Y axis
+     * (see Gesture.kt), so in a sideways frame those comparisons measure the wrong axis and
+     * nearly every pose collapses to UNKNOWN. Face gestures kept working through the same bug
+     * because blendshape scores are computed in the face's own coordinate frame, making them
+     * rotation-invariant — which is exactly why hand and face behaved differently on-device.
+     *
+     * The frame is also mirrored, matching how a front camera is conventionally previewed: with
+     * it, moving your hand to your right moves it right within the frame, so the air-trackpad's
+     * swipe directions and the gaze left/right offsets follow what you actually see. */
+    private fun ImageProxy.toUprightMirroredBitmap(): Bitmap {
+        val raw = toBitmap()
+        val matrix = Matrix().apply {
+            postRotate(imageInfo.rotationDegrees.toFloat())
+            postScale(-1f, 1f)
+        }
+        return Bitmap.createBitmap(raw, 0, 0, raw.width, raw.height, matrix, true)
     }
 
     private fun onLandmarkResult(result: com.google.mediapipe.tasks.vision.handlandmarker.HandLandmarkerResult) {

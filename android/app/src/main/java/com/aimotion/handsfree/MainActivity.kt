@@ -96,6 +96,7 @@ class MainActivity : AppCompatActivity() {
             @Suppress("BatteryLife")
             startActivity(Intent(Settings.ACTION_REQUEST_IGNORE_BATTERY_OPTIMIZATIONS, Uri.parse("package:$packageName")))
         }
+        binding.restrictedSettingsButton.setOnClickListener { showRestrictedSettingsHelp() }
         binding.serviceSwitch.setOnCheckedChangeListener { _, checked ->
             if (checked) maybeStartService() else GestureControlService.stop(this)
         }
@@ -147,6 +148,43 @@ class MainActivity : AppCompatActivity() {
         if (hasCameraPermission() && isAccessibilityServiceEnabled()) {
             GestureControlService.start(this)
         }
+    }
+
+    /** Android 13+ puts Accessibility and "display over other apps" behind "Restricted settings"
+     * for any app installed outside an app store — that's the "App was denied access" dialog.
+     * It is an OS security gate and no app can lift it for itself, by design. What this app
+     * *can* do is stop sending people to a dead end: the block appears on the Accessibility and
+     * overlay screens, but the unlock lives in this app's own App info page, so point there and
+     * spell out the taps. */
+    private fun showRestrictedSettingsHelp() {
+        val steps = """
+            Android blocks these permissions for apps installed outside an app store. Air Sensor cannot grant them to itself — you unlock it once, by hand:
+
+            1. Tap "Open app info" below.
+            2. Tap ⋮ (three dots, top right).
+            3. Tap "Allow restricted settings".
+            4. Come back here and turn on Accessibility and the floating bubble.
+
+            On Realme / ColorOS you can also reach that page via Settings → Apps → App management → Air Sensor.
+
+            If step 3 is missing from the menu, this phone will only unlock it over ADB from a computer:
+
+            adb shell appops set $packageName ACCESS_RESTRICTED_SETTINGS allow
+        """.trimIndent()
+
+        android.app.AlertDialog.Builder(this)
+            .setTitle("\"App was denied access\"")
+            .setMessage(steps)
+            .setPositiveButton("Open app info") { _, _ ->
+                startActivity(
+                    Intent(
+                        Settings.ACTION_APPLICATION_DETAILS_SETTINGS,
+                        Uri.parse("package:$packageName"),
+                    )
+                )
+            }
+            .setNegativeButton("Close", null)
+            .show()
     }
 
     private fun showAppPicker(triggerLabel: String, onPicked: (String) -> Unit) {
