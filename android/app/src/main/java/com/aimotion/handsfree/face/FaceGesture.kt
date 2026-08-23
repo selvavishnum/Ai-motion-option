@@ -27,20 +27,48 @@ private const val EYEBROWS_THRESHOLD = 0.5f
 private const val MOUTH_OPEN_THRESHOLD = 0.5f
 private const val SMILE_THRESHOLD = 0.6f
 
+/**
+ * The blendshape scores this classifier consults, already averaged across left/right where the
+ * expression is symmetric. Extracted from MediaPipe's 52 categories in a single pass — see
+ * `FaceLandmarkerResult.faceSignals()`.
+ */
+data class FaceSignals(
+    val leftBlink: Float,
+    val rightBlink: Float,
+    val browsUp: Float,
+    val browsDown: Float,
+    val mouthOpen: Float,
+    val smile: Float,
+)
+
 /** [blendshapes] keys are MediaPipe's standard ARKit-style blendshape names, e.g.
- * "eyeBlinkLeft", "jawOpen", "mouthSmileLeft". Missing keys score 0. Checked in priority order:
- * a wink (one eye closed, the other clearly open) is checked before a full blink, since a wink
- * is a stricter subset of "some blink signal present". */
+ * "eyeBlinkLeft", "jawOpen", "mouthSmileLeft". Missing keys score 0. Kept for callers holding a
+ * map; the frame loop uses the [FaceSignals] overload, which never builds one. */
 fun classifyFaceGesture(blendshapes: Map<String, Float>): FaceGesture? {
     fun score(name: String) = blendshapes[name] ?: 0f
     fun avg(a: String, b: String) = (score(a) + score(b)) / 2f
 
-    val leftBlink = score("eyeBlinkLeft")
-    val rightBlink = score("eyeBlinkRight")
-    val browsUp = avg("browOuterUpLeft", "browOuterUpRight")
-    val browsDown = avg("browDownLeft", "browDownRight")
-    val mouthOpen = score("jawOpen")
-    val smile = avg("mouthSmileLeft", "mouthSmileRight")
+    return classifyFaceGesture(
+        FaceSignals(
+            leftBlink = score("eyeBlinkLeft"),
+            rightBlink = score("eyeBlinkRight"),
+            browsUp = avg("browOuterUpLeft", "browOuterUpRight"),
+            browsDown = avg("browDownLeft", "browDownRight"),
+            mouthOpen = score("jawOpen"),
+            smile = avg("mouthSmileLeft", "mouthSmileRight"),
+        )
+    )
+}
+
+/** Checked in priority order: a wink (one eye closed, the other clearly open) is tested before a
+ * full blink, since a wink is a stricter subset of "some blink signal present". */
+fun classifyFaceGesture(signals: FaceSignals): FaceGesture? {
+    val leftBlink = signals.leftBlink
+    val rightBlink = signals.rightBlink
+    val browsUp = signals.browsUp
+    val browsDown = signals.browsDown
+    val mouthOpen = signals.mouthOpen
+    val smile = signals.smile
 
     return when {
         leftBlink > WINK_CLOSED_THRESHOLD && rightBlink < WINK_OTHER_EYE_OPEN_THRESHOLD -> FaceGesture.WINK_LEFT

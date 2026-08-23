@@ -22,7 +22,7 @@ private const val MODEL_FILE_NAME = "hand_landmarker.task"
 class HandLandmarkerHelper(
     context: Context,
     private val onResult: (HandLandmarkerResult) -> Unit,
-) {
+) : FrameDetector {
     private val landmarker: HandLandmarker
 
     init {
@@ -59,11 +59,11 @@ class HandLandmarkerHelper(
         }
     }
 
-    fun detectAsync(bitmap: Bitmap, timestampMs: Long) {
+    override fun detectAsync(bitmap: Bitmap, timestampMs: Long) {
         landmarker.detectAsync(BitmapImageBuilder(bitmap).build(), timestampMs)
     }
 
-    fun close() = landmarker.close()
+    override fun close() = landmarker.close()
 
     companion object {
         private fun ensureModel(context: Context): File {
@@ -79,6 +79,29 @@ class HandLandmarkerHelper(
     }
 }
 
+/**
+ * The gesture of the first detected hand, or [Gesture.UNKNOWN] when there isn't one.
+ *
+ * The hot path calls this instead of [toGestures] because it is what the caller actually wanted:
+ * [toGestures] builds a list and a [Pair] per hand, and the frame loop then discarded everything
+ * but `first().first`. The detector is configured for a single hand, so those extras were pure
+ * garbage on every frame.
+ */
+fun HandLandmarkerResult.topGesture(): Gesture {
+    val hands = landmarks()
+    if (hands.isEmpty()) return Gesture.UNKNOWN
+    val first = hands[0]
+    if (first.size != 21) return Gesture.UNKNOWN
+    val handedness = if (handedness().getOrNull(0)?.firstOrNull()?.categoryName() == "Left") {
+        Handedness.LEFT
+    } else {
+        Handedness.RIGHT
+    }
+    return classifyGesture(first.map { Point(it.x(), it.y(), it.z()) }, handedness)
+}
+
+/** Every detected hand's gesture. Retained for callers that genuinely need more than the first;
+ * the frame loop uses [topGesture]. */
 fun HandLandmarkerResult.toGestures(): List<Pair<Gesture, Handedness>> {
     val results = mutableListOf<Pair<Gesture, Handedness>>()
     for (i in landmarks().indices) {

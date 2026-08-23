@@ -42,10 +42,19 @@ fun extendedFingers(landmarks: List<Point>, handedness: Handedness): List<Boolea
         FINGER_TIP_PIP.map { (tip, pip) -> fingerExtended(landmarks, tip, pip) }
 }
 
+/**
+ * Runs on every camera frame, so it reads the five finger states directly rather than going
+ * through [extendedFingers]. That path allocated three lists per call — `listOf(thumb)`, the
+ * `.map` over the tip/pip pairs, and the `+` that joined them — plus a wrapper object for the
+ * destructuring, to answer five boolean questions. Same logic, same results, no garbage.
+ */
 fun classifyGesture(landmarks: List<Point>, handedness: Handedness): Gesture {
-    val (thumb, index, middle, ring, pinky) = extendedFingers(landmarks, handedness).let {
-        Quintuple(it[0], it[1], it[2], it[3], it[4])
-    }
+    require(landmarks.size == NUM_LANDMARKS) { "expected $NUM_LANDMARKS landmarks, got ${landmarks.size}" }
+    val thumb = thumbExtended(landmarks, handedness)
+    val index = fingerExtended(landmarks, 8, 6)
+    val middle = fingerExtended(landmarks, 12, 10)
+    val ring = fingerExtended(landmarks, 16, 14)
+    val pinky = fingerExtended(landmarks, 20, 18)
     val othersUp = index && middle && ring && pinky
     val othersDown = !(index || middle || ring || pinky)
 
@@ -62,5 +71,3 @@ fun classifyGesture(landmarks: List<Point>, handedness: Handedness): Gesture {
         else -> Gesture.UNKNOWN
     }
 }
-
-private data class Quintuple<T>(val a: T, val b: T, val c: T, val d: T, val e: T)

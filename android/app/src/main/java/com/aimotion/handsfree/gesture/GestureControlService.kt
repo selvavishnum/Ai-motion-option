@@ -22,8 +22,8 @@ import com.aimotion.handsfree.R
 import com.aimotion.handsfree.face.FaceGesture
 import com.aimotion.handsfree.face.FaceLandmarkerHelper
 import com.aimotion.handsfree.face.FaceMappingStore
-import com.aimotion.handsfree.face.blendshapeMap
 import com.aimotion.handsfree.face.classifyFaceGesture
+import com.aimotion.handsfree.face.faceSignals
 import com.aimotion.handsfree.face.classifyGaze
 import com.aimotion.handsfree.face.gazeOffset
 import com.aimotion.handsfree.overlay.OverlayBubbleService
@@ -76,6 +76,10 @@ class GestureControlService : LifecycleService() {
 
     private var lastFrameAtMs = 0L
     private var frameCounter = 0
+
+    // Confined to analysisExecutor; see toUprightMirroredBitmap.
+    private var cachedMatrix: Matrix? = null
+    private var cachedRotation = Int.MIN_VALUE
     private var lastFiredAtMs = 0L
     private var candidateGesture: Gesture = Gesture.UNKNOWN
     private var candidateStreak = 0
@@ -172,31 +176,34 @@ class GestureControlService : LifecycleService() {
             return
         }
         lastFrameAtMs = now
+
+        // Pick the consumer BEFORE preparing the frame. Running both models on every frame is too
+        // expensive for a mid-range phone, so when both are enabled they alternate — but when
+        // only one is on it gets *every* frame, halving how long that modality takes to
+        // recognise a gesture. That's why the on/off switches are a responsiveness control as
+        // much as a preference.
+        //
+        // Resolving this first also matters for cost: toUprightMirroredBitmap below is a
+        // full-resolution copy, and the previous order paid for it on every frame even when both
+        // detectors were off or neither had finished initialising, then dropped the result.
+        val hand = handLandmarkerHelper.takeIf { toggles.handEnabled }
+        val face = faceLandmarkerHelper.takeIf { toggles.faceEnabled }
+        frameCounter++
+        val consumer: FrameDetector? = when {
+            hand != null && face != null -> if (frameCounter % 2 == 0) hand else face
+            else -> hand ?: face
+        }
+        if (consumer == null) {
+            imageProxy.close()
+            return
+        }
+
         val bitmap: Bitmap = try {
             imageProxy.toUprightMirroredBitmap()
         } finally {
             imageProxy.close()
         }
-        // Route the frame to whichever detectors are switched on. Running both models on every
-        // frame is too expensive for a mid-range phone, so when both are enabled they alternate
-        // — but when only one is on it gets *every* frame, which halves how long that modality
-        // takes to recognise a gesture. That's why the on/off switches are a responsiveness
-        // control as much as a preference: turning off the half you aren't using makes the half
-        // you are twice as fast.
-        val handOn = toggles.handEnabled
-        val faceOn = toggles.faceEnabled
-        frameCounter++
-        when {
-            handOn && faceOn ->
-                if (frameCounter % 2 == 0) {
-                    handLandmarkerHelper?.detectAsync(bitmap, now)
-                } else {
-                    faceLandmarkerHelper?.detectAsync(bitmap, now)
-                }
-            handOn -> handLandmarkerHelper?.detectAsync(bitmap, now)
-            faceOn -> faceLandmarkerHelper?.detectAsync(bitmap, now)
-            else -> Unit // both off: camera stays bound, nothing is inferred
-        }
+        consumer.detectAsync(bitmap, now)
     }
 
     /** CameraX hands back the raw sensor buffer, and [ImageProxy.toBitmap] does **not** apply
@@ -213,16 +220,40 @@ class GestureControlService : LifecycleService() {
      * swipe directions and the gaze left/right offsets follow what you actually see. */
     private fun ImageProxy.toUprightMirroredBitmap(): Bitmap {
         val raw = toBitmap()
-        val matrix = Matrix().apply {
-            postRotate(imageInfo.rotationDegrees.toFloat())
-            postScale(-1f, 1f)
+        val rotation = imageInfo.rotationDegrees
+
+        // The transform only changes when the device rotates, so the Matrix is built once and
+        // reused rather than allocated per frame. Safe without synchronisation: analyzeFrame and
+        // this function both run on the single-threaded analysisExecutor.
+        var matrix = cachedMatrix
+        if (matrix == null || rotation != cachedRotation) {
+            matrix = Matrix().apply {
+                postRotate(rotation.toFloat())
+                postScale(-1f, 1f)
+            }
+            cachedMatrix = matrix
+            cachedRotation = rotation
         }
-        return Bitmap.createBitmap(raw, 0, 0, raw.width, raw.height, matrix, true)
+
+        val transformed = Bitmap.createBitmap(raw, 0, 0, raw.width, raw.height, matrix, true)
+
+        // Two full-resolution bitmaps exist per frame: the buffer copy from CameraX and the
+        // transformed result. Only the second is handed to MediaPipe, so releasing the first
+        // here frees its pixel memory immediately instead of leaving ~1MB per frame for the
+        // collector to find — which, at this frame rate, is the difference between steady state
+        // and constant GC pressure.
+        //
+        // createBitmap may hand back the source unchanged when the transform is a no-op, so
+        // identity is checked before recycling something still in use.
+        if (transformed !== raw) raw.recycle()
+
+        return transformed
     }
 
     private fun onLandmarkResult(result: com.google.mediapipe.tasks.vision.handlandmarker.HandLandmarkerResult) {
-        val gestures = result.toGestures()
-        val top = gestures.firstOrNull()?.first ?: Gesture.UNKNOWN
+        // topGesture() rather than toGestures(): the detector tracks a single hand and only the
+        // first result was ever read, so building a list and a Pair per frame was garbage.
+        val top = result.topGesture()
 
         when (top) {
             // A single extended index finger drives the continuous mini-trackpad below instead
@@ -348,10 +379,12 @@ class GestureControlService : LifecycleService() {
     }
 
     private fun onFaceResult(result: com.google.mediapipe.tasks.vision.facelandmarker.FaceLandmarkerResult) {
-        val blendshapes = result.blendshapeMap()
+        // faceSignals() rather than blendshapeMap(): MediaPipe emits 52 blendshape categories and
+        // the classifier reads six, so materialising the whole map every frame was waste.
+        //
         // Blendshape-based expressions (blink, wink, eyebrows, mouth, smile) take priority —
         // they're a more reliable signal than gaze, which only kicks in when nothing else fired.
-        val detected = blendshapes?.let { classifyFaceGesture(it) }
+        val detected = result.faceSignals()?.let { classifyFaceGesture(it) }
             ?: result.gazeOffset()?.let { classifyGaze(it) }
         handleDetectedFaceGesture(detected)
     }
