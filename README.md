@@ -330,3 +330,26 @@ is a pocket, a face-down phone or a call, not a gesture. Without that guard the 
 constantly in a pocket.
 
 If the phone has no proximity sensor the switch is disabled and says so.
+
+### Updating without losing your settings
+
+The release APK is signed with a **committed keystore** (`android/app/airsensor-release.keystore`,
+password in `app/build.gradle.kts`). That is deliberate, and worth explaining because committing a
+signing key is normally wrong.
+
+CI previously generated a throwaway key on every run. Every APK was therefore signed differently,
+and Android refuses to install one build over another when the signature changes
+(`INSTALL_FAILED_UPDATE_INCOMPATIBLE`, surfaced as a bare "App not installed"). Updating meant
+uninstalling first — which deletes every saved gesture mapping and permission grant. A stable key
+is what makes an update actually an update.
+
+**This key is not a secret.** Anyone with the repository can produce an APK that Android will
+accept as an update to this app. That trade is only acceptable because this is a personally
+sideloaded app distributed through nothing. If this were ever published properly, generate a
+private key, keep it out of the repository, and pass it in through the `RELEASE_KEYSTORE_PATH`,
+`RELEASE_KEYSTORE_PASSWORD`, `RELEASE_KEY_ALIAS` and `RELEASE_KEY_PASSWORD` environment variables,
+which still take precedence over the committed one.
+
+One-time step: because builds before this change were signed with a different (random) key, the
+**first** install after it still needs an uninstall. Every update after that installs cleanly over
+the top.
