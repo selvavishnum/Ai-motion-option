@@ -298,3 +298,35 @@ two of them automatic:
 Battery-optimisation exemption is still worth granting: it stops OEM battery managers
 (ColorOS/Realme UI, MIUI) from killing the service outright, which is a reliability setting, not
 a power one.
+
+### Wave gestures — no camera
+
+The proximity sensor (the one that blanks the screen during a call) can detect a hand passing
+over the top of the phone. That gives a **third, camera-free trigger modality**, enabled with
+**Wave gestures (no camera)**:
+
+| Wave | Default action |
+| ---- | -------------- |
+| Wave once | Wake screen |
+| Wave twice | Home |
+
+Both are remappable, in their own section of the mapping list.
+
+**It is deliberately tiny, because the hardware genuinely cannot do more.** The sensor reports
+one thing — something is near, or nothing is near. There is no shape, no direction, no usable
+distance. Palm vs fist, scroll direction, pinch and every face gesture need the camera; nothing
+on the phone can substitute for actually seeing your hand.
+
+What it buys instead is power and coverage:
+
+- It is hardware-triggered and costs a fraction of a milliamp, against the camera's continuous
+  capture plus model inference.
+- It keeps working while the screen is off — exactly the window where the camera is released to
+  save battery. So *wave to wake the screen* still works with **Save battery when screen is off**
+  enabled, which would otherwise be a straight choice between the two.
+
+Holding your hand over the sensor does nothing on purpose: anything covered for more than ~1.2s
+is a pocket, a face-down phone or a call, not a gesture. Without that guard the mode would fire
+constantly in a pocket.
+
+If the phone has no proximity sensor the switch is disabled and says so.

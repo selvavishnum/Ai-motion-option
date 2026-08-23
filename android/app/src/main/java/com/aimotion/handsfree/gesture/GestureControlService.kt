@@ -81,6 +81,8 @@ class GestureControlService : LifecycleService() {
     private lateinit var mappingStore: GestureMappingStore
     private lateinit var faceMappingStore: FaceMappingStore
     private lateinit var toggles: GestureToggleStore
+    private lateinit var proximityMappingStore: ProximityMappingStore
+    private var proximityDetector: ProximityGestureDetector? = null
     private var handLandmarkerHelper: HandLandmarkerHelper? = null
     private var faceLandmarkerHelper: FaceLandmarkerHelper? = null
     private var cameraProvider: ProcessCameraProvider? = null
@@ -121,7 +123,9 @@ class GestureControlService : LifecycleService() {
         mappingStore = GestureMappingStore(this)
         faceMappingStore = FaceMappingStore(this)
         toggles = GestureToggleStore(this)
+        proximityMappingStore = ProximityMappingStore(this)
         startForeground(NOTIFICATION_ID, buildNotification())
+        startProximityDetection()
         initDetectorsAsync()
         startCamera()
         // ACTION_SCREEN_ON/OFF are only deliverable to a runtime-registered receiver; they
@@ -139,6 +143,33 @@ class GestureControlService : LifecycleService() {
         // MainActivity happens to be open — a no-op if the overlay permission isn't granted,
         // and skipped entirely when the user has hidden the dot.
         if (toggles.bubbleEnabled) OverlayBubbleService.start(this)
+    }
+
+    /**
+     * Wave detection runs on the proximity sensor, entirely independent of the camera.
+     *
+     * That independence is the point: it keeps working while the camera is released for the
+     * screen being off, which is precisely the window the camera cannot cover. Waving to wake the
+     * screen therefore still works with battery saving on — the trade-off that would otherwise
+     * force a choice between the two.
+     *
+     * Not tied to screen state, and not restarted on resume, because a hardware-triggered sensor
+     * costs a fraction of a milliamp; gating it would save nothing and add a failure mode.
+     */
+    private fun startProximityDetection() {
+        val detector = ProximityGestureDetector(this) { gesture -> onProximityGesture(gesture) }
+        if (!detector.isAvailable) {
+            Log.i(TAG, "no proximity sensor; wave gestures disabled on this device")
+            return
+        }
+        proximityDetector = detector
+        if (toggles.waveEnabled) detector.start()
+    }
+
+    private fun onProximityGesture(gesture: ProximityGesture) {
+        if (!toggles.waveEnabled) return
+        val action = proximityMappingStore.load()[gesture] ?: return
+        ActionDispatcher.fire(action)
     }
 
     /** Each helper downloads its model file the first time it's constructed — blocking network
@@ -163,6 +194,8 @@ class GestureControlService : LifecycleService() {
     override fun onDestroy() {
         super.onDestroy()
         runCatching { unregisterReceiver(screenStateReceiver) }
+        proximityDetector?.stop()
+        proximityDetector = null
         cameraProvider?.unbindAll()
         cameraBound = false
         // Queued rather than closed inline: the helpers are owned by analysisExecutor (see
