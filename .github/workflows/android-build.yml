@@ -56,12 +56,16 @@ jobs:
             Auto-built from the latest `main`. Two APKs are attached — try `app-release.apk`
             first (some phones, e.g. ColorOS/Realme UI and MIUI, block the debug-signed one):
 
-            - `app-release.apk` — signed with a real (non-debug) key, generated fresh on
-              every build. Recommended.
+            - `app-release.apk` — signed with a stable release key, so each build installs
+              over the previous one and your settings survive. Recommended.
             - `app-debug.apk` — standard debug build, for comparison/debugging.
 
             Download on your phone and open it to install (enable "install unknown apps"
             for your browser/file manager when prompted).
+
+            Builds published before 2026-08-23 were each signed with a different throwaway key,
+            so upgrading from one of those needs a one-time uninstall first. Every build from
+            then on installs straight over the top.
           prerelease: true
           files: |
             android/app/build/outputs/apk/debug/app-debug.apk
