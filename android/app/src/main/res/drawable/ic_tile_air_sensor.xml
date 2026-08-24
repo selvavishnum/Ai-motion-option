@@ -1,0 +1,24 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Quick Settings tile icon. Quick Settings tints the tile icon itself (white when active,
+     dimmed when not), so this is a single-colour silhouette with no baked-in colour of its own.
+     A hand with motion arcs beside it: the hand says "gesture", the arcs say "in the air".
+     The fill colour below is only a placeholder for the tint that replaces it. -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="24dp"
+    android:height="24dp"
+    android:viewportWidth="24"
+    android:viewportHeight="24">
+
+    <!-- Palm and fingers, pointing up. -->
+    <path
+        android:fillColor="#FF000000"
+        android:pathData="M9.5,2.75c-0.55,0 -1,0.45 -1,1v6.5h-1V5.25c0,-0.55 -0.45,-1 -1,-1s-1,0.45 -1,1v9.1l-1.4,-1.75c-0.36,-0.45 -1.01,-0.5 -1.43,-0.11c-0.38,0.35 -0.43,0.93 -0.13,1.35l3.13,4.32c0.85,1.18 2.22,1.88 3.68,1.88h3.2c2.48,0 4.5,-2.02 4.5,-4.5v-4.7c0,-0.55 -0.45,-1 -1,-1s-1,0.45 -1,1v2.2h-1v-3.7c0,-0.55 -0.45,-1 -1,-1s-1,0.45 -1,1v3.7h-1v-4.5c0,-0.55 -0.45,-1 -1,-1s-1,0.45 -1,1v4.5h-1V3.75c0,-0.55 -0.45,-1 -1,-1z" />
+
+    <!-- Two motion arcs radiating from the hand. -->
+    <path
+        android:fillColor="#FF000000"
+        android:pathData="M18.4,2.1c-0.4,0.38 -0.42,1.01 -0.04,1.41c0.7,0.74 1.09,1.72 1.09,2.74s-0.39,2 -1.09,2.74c-0.38,0.4 -0.36,1.03 0.04,1.41c0.4,0.38 1.03,0.36 1.41,-0.04c1.05,-1.11 1.64,-2.58 1.64,-4.11s-0.59,-3 -1.64,-4.11c-0.38,-0.4 -1.01,-0.42 -1.41,-0.04z" />
+    <path
+        android:fillColor="#FF000000"
+        android:pathData="M15.85,4.4c-0.42,0.36 -0.47,0.99 -0.11,1.41c0.16,0.19 0.25,0.43 0.25,0.68s-0.09,0.49 -0.25,0.68c-0.36,0.42 -0.31,1.05 0.11,1.41c0.42,0.36 1.05,0.31 1.41,-0.11c0.47,-0.55 0.73,-1.25 0.73,-1.98s-0.26,-1.43 -0.73,-1.98c-0.36,-0.42 -0.99,-0.47 -1.41,-0.11z" />
+</vector>

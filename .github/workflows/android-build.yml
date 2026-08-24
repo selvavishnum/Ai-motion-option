@@ -25,24 +25,51 @@ jobs:
           distribution: temurin
           java-version: "17"
 
+      # The signing key is never in the repository. It is held as repository secrets and written
+      # to a file outside the working tree for the length of the job. RELEASE_KEYSTORE_BASE64 is
+      # the .keystore/.jks file base64-encoded (`base64 -w0 my.keystore`).
+      #
+      # With the secrets unset — a fork, or before they have been added — this step is skipped,
+      # RELEASE_KEYSTORE_PATH stays empty, and app/build.gradle.kts leaves the release build
+      # unsigned rather than signing it with a key that isn't the real one. The build still
+      # verifies that everything compiles, which is what CI is for.
+      - name: Decode signing keystore
+        id: keystore
+        env:
+          # Passed through the environment rather than interpolated into the script: a secret
+          # substituted into `run` becomes part of the command line.
+          KEYSTORE_BASE64: ${{ secrets.RELEASE_KEYSTORE_BASE64 }}
+        run: |
+          if [ -n "$KEYSTORE_BASE64" ]; then
+            printf '%s' "$KEYSTORE_BASE64" | base64 -d > "${RUNNER_TEMP}/release.keystore"
+            echo "path=${RUNNER_TEMP}/release.keystore" >> "$GITHUB_OUTPUT"
+          else
+            echo "No signing secrets configured - the release build will be unsigned."
+          fi
+
       - name: Build debug APK
         run: |
           chmod +x ./gradlew
           ./gradlew assembleDebug --no-daemon
 
-      # No keystore generation here any more. CI used to mint a fresh key on every run,
-      # which signed each APK differently and made "install over the previous build" fail with
-      # INSTALL_FAILED_UPDATE_INCOMPATIBLE — forcing an uninstall that wiped saved settings.
-      # The committed keystore in android/app/ is used instead; see app/build.gradle.kts.
-      - name: Build release APK
-        run: ./gradlew assembleRelease --no-daemon
+      - name: Build release APK and Play bundle
+        env:
+          RELEASE_KEYSTORE_PATH: ${{ steps.keystore.outputs.path }}
+          RELEASE_KEYSTORE_PASSWORD: ${{ secrets.RELEASE_KEYSTORE_PASSWORD }}
+          RELEASE_KEY_ALIAS: ${{ secrets.RELEASE_KEY_ALIAS }}
+          RELEASE_KEY_PASSWORD: ${{ secrets.RELEASE_KEY_PASSWORD }}
+        # bundleRelease produces the .aab Play Console accepts; assembleRelease produces the .apk
+        # for sideloading. Play will not take an APK, and a phone will not install an AAB, so
+        # both are built.
+        run: ./gradlew assembleRelease bundleRelease --no-daemon
 
       - uses: actions/upload-artifact@v4
         with:
-          name: app-apks
+          name: app-builds
           path: |
             android/app/build/outputs/apk/debug/app-debug.apk
-            android/app/build/outputs/apk/release/app-release.apk
+            android/app/build/outputs/apk/release/*.apk
+            android/app/build/outputs/bundle/release/*.aab
 
       # A GitHub Release asset downloads as a raw .apk (unlike a zipped Actions artifact),
       # which is what lets a phone browser install it directly with no unzip step.
@@ -51,20 +78,28 @@ jobs:
         uses: softprops/action-gh-release@v2
         with:
           tag_name: android-latest
-          name: Hands-Free Gestures (latest build)
+          name: Air Sensor (latest build)
           body: |
-            Auto-built from the latest `main`. Two APKs are attached — try `app-release.apk`
-            first (some phones, e.g. ColorOS/Realme UI and MIUI, block the debug-signed one):
+            Auto-built from the latest `main`.
 
-            - `app-release.apk` — signed with a real (non-debug) key, generated fresh on
-              every build. Recommended.
-            - `app-debug.apk` — standard debug build, for comparison/debugging.
+            - `app-debug.apk` — install this one for sideloading. It is signed with the standard
+              debug key, which is stable, so each build installs over the previous one.
+            - `app-release-unsigned.apk` / `app-release.apk` — the release build. It is only
+              signed when the repository's signing secrets are configured; an unsigned APK cannot
+              be installed on a phone.
+            - `app-release.aab` — the Android App Bundle, for uploading to Play Console. Phones
+              cannot install this.
 
-            Download on your phone and open it to install (enable "install unknown apps"
-            for your browser/file manager when prompted).
+            Download the APK on your phone and open it to install (enable "install unknown apps"
+            for your browser or file manager when prompted).
+
+            **The signing key changed on 2026-08-23** — it was moved out of the repository, where
+            it never belonged. Upgrading across that change needs a one-time uninstall, which
+            clears saved gesture mappings.
           prerelease: true
           files: |
             android/app/build/outputs/apk/debug/app-debug.apk
-            android/app/build/outputs/apk/release/app-release.apk
+            android/app/build/outputs/apk/release/*.apk
+            android/app/build/outputs/bundle/release/*.aab
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

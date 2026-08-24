@@ -1,286 +1,289 @@
 <?xml version="1.0" encoding="utf-8"?>
+<!--
+  One column, one card per decision, generous white space. Every section is the same
+  Widget.AirSensor.Card style so the page has one rhythm rather than a stack of ad-hoc spacings,
+  and the only colour on the screen is the accent on buttons — on a white page, colour is what
+  says "this is the thing to tap".
+
+  The mapping tables that used to live inline here now have their own screen (GestureMappingActivity);
+  three RecyclerViews nested in a ScrollView both scrolled badly and buried the settings above them.
+-->
 <ScrollView xmlns:android="http://schemas.android.com/apk/res/android"
-    xmlns:tools="http://schemas.android.com/tools"
     android:layout_width="match_parent"
     android:layout_height="match_parent"
-    android:background="@color/background">
+    android:background="@color/background"
+    android:fillViewport="true"
+    android:scrollbars="none">
 
     <LinearLayout
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
         android:orientation="vertical"
-        android:padding="20dp">
+        android:paddingStart="20dp"
+        android:paddingEnd="20dp"
+        android:paddingTop="28dp"
+        android:paddingBottom="32dp">
 
         <TextView
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
             android:text="@string/app_name"
             android:textColor="@color/onSurface"
-            android:textSize="24sp"
+            android:textSize="30sp"
             android:textStyle="bold" />
 
-        <Button
-            android:id="@+id/gestureGuideButton"
-            style="@style/Widget.MaterialComponents.Button.OutlinedButton"
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:layout_marginTop="8dp"
-            android:text="Gesture guide" />
-
-        <Button
-            android:id="@+id/gestureMappingComposeButton"
-            style="@style/Widget.MaterialComponents.Button.OutlinedButton"
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:layout_marginTop="8dp"
-            android:text="Gesture mapping (new UI, beta)" />
-
-        <Button
-            android:id="@+id/paperShowcaseButton"
-            style="@style/Widget.MaterialComponents.Button.OutlinedButton"
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:layout_marginTop="8dp"
-            android:text="Paper design system" />
-
-        <Button
-            android:id="@+id/sensorListButton"
-            style="@style/Widget.MaterialComponents.Button.OutlinedButton"
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:layout_marginTop="8dp"
-            android:text="What sensors does this phone have?" />
-
         <TextView
-            android:id="@+id/statusText"
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:layout_marginTop="4dp"
-            android:textColor="@color/muted"
-            android:textSize="13sp"
-            tools:text="Camera: granted · Accessibility: off" />
-
-        <Button
-            android:id="@+id/grantCameraButton"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:layout_marginTop="16dp"
-            android:text="Grant camera permission" />
+            android:layout_marginTop="6dp"
+            android:text="@string/app_tagline"
+            android:textAppearance="@style/TextAppearance.AirSensor.Hint" />
 
-        <Button
-            android:id="@+id/openAccessibilityButton"
+        <!-- Setup ................................................................ -->
+        <LinearLayout
+            style="@style/Widget.AirSensor.Card"
             android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:layout_marginTop="8dp"
-            android:text="Turn on Accessibility permission" />
-
-        <Button
-            android:id="@+id/openOverlayButton"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:layout_marginTop="8dp"
-            android:text="Allow floating status bubble (optional)" />
-
-        <Button
-            android:id="@+id/openBatteryButton"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:layout_marginTop="8dp"
-            android:text="Ignore battery optimization (recommended)" />
-
-        <Button
-            android:id="@+id/deviceAdminButton"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:layout_marginTop="8dp"
-            android:text="Allow screen off (device admin)" />
-
-        <Button
-            android:id="@+id/restrictedSettingsButton"
-            style="@style/Widget.MaterialComponents.Button.OutlinedButton"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:layout_marginTop="8dp"
-            android:text="Got &quot;App was denied access&quot;? Fix it" />
-
-        <TextView
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:layout_marginTop="4dp"
-            android:text="Android blocks Accessibility and the floating bubble for apps installed outside an app store. You unlock it once by hand — tap above for the exact steps."
-            android:textColor="@color/muted"
-            android:textSize="12sp" />
-
-        <com.google.android.material.switchmaterial.SwitchMaterial
-            android:id="@+id/serviceSwitch"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:layout_marginTop="20dp"
-            android:text="Gesture control running"
-            android:textColor="@color/onSurface" />
-
-        <com.google.android.material.switchmaterial.SwitchMaterial
-            android:id="@+id/handGestureSwitch"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:layout_marginTop="12dp"
-            android:text="Air (hand) gestures"
-            android:textColor="@color/onSurface" />
-
-        <com.google.android.material.switchmaterial.SwitchMaterial
-            android:id="@+id/faceGestureSwitch"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:layout_marginTop="4dp"
-            android:text="Face gestures"
-            android:textColor="@color/onSurface" />
-
-        <com.google.android.material.switchmaterial.SwitchMaterial
-            android:id="@+id/pointerSwitch"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:layout_marginTop="4dp"
-            android:text="Air pointer (blue dot)"
-            android:textColor="@color/onSurface" />
-
-        <TextView
-            android:id="@+id/pointerHintText"
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:layout_marginTop="2dp"
-            android:text="A blue dot follows your pointed finger, and holding still taps exactly where the dot is. Replaces finger swipe/scroll while it's on. Needs the floating bubble permission."
-            android:textColor="@color/muted"
-            android:textSize="12sp" />
-
-        <com.google.android.material.switchmaterial.SwitchMaterial
-            android:id="@+id/waveGestureSwitch"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:layout_marginTop="4dp"
-            android:text="Wave gestures (no camera)"
-            android:textColor="@color/onSurface" />
-
-        <TextView
-            android:id="@+id/waveHintText"
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:layout_marginTop="2dp"
-            android:text="Uses the proximity sensor instead of the camera — almost no battery, and it still works while the screen is off. Only wave once or twice; it can't see hand shapes."
-            android:textColor="@color/muted"
-            android:textSize="12sp" />
-
-        <com.google.android.material.switchmaterial.SwitchMaterial
-            android:id="@+id/batterySaverSwitch"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:layout_marginTop="4dp"
-            android:text="Save battery when screen is off"
-            android:textColor="@color/onSurface" />
-
-        <TextView
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:layout_marginTop="2dp"
-            android:text="Turns the camera off while your screen is off — the biggest battery saving. Gestures then can't wake the screen; switch this off if you need that."
-            android:textColor="@color/muted"
-            android:textSize="12sp" />
-
-        <com.google.android.material.switchmaterial.SwitchMaterial
-            android:id="@+id/bubbleSwitch"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:layout_marginTop="4dp"
-            android:text="Show floating blue dot"
-            android:textColor="@color/onSurface" />
-
-        <TextView
-            android:id="@+id/speedHintText"
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:layout_marginTop="4dp"
-            android:text="Tip: the camera has a fixed number of frames per second to share. With both on they take turns, so switching off the one you don't use makes the other about twice as fast to react."
-            android:textColor="@color/muted"
-            android:textSize="12sp" />
-
-        <TextView
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:layout_marginTop="8dp"
-            android:text="Always on, not in the list below: two-finger pinch zooms in/out, and a single pointed finger is a mini air-trackpad — move it to turn/scroll, hold it still to tap/select."
-            android:textColor="@color/muted"
-            android:textSize="12sp" />
-
-        <TextView
-            android:layout_width="wrap_content"
             android:layout_height="wrap_content"
             android:layout_marginTop="24dp"
-            android:text="Gesture mapping"
-            android:textColor="@color/onSurface"
-            android:textSize="18sp"
-            android:textStyle="bold" />
+            android:orientation="vertical">
 
-        <TextView
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:layout_marginTop="2dp"
-            android:text="Tap an action to change it, or Choose app for the Launch app action."
-            android:textColor="@color/muted"
-            android:textSize="12sp" />
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="Setup"
+                android:textAppearance="@style/TextAppearance.AirSensor.SectionTitle" />
 
-        <androidx.recyclerview.widget.RecyclerView
-            android:id="@+id/mappingList"
+            <TextView
+                android:id="@+id/statusText"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="6dp"
+                android:textAppearance="@style/TextAppearance.AirSensor.Hint" />
+
+            <Button
+                android:id="@+id/grantCameraButton"
+                style="@style/Widget.MaterialComponents.Button.OutlinedButton"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="12dp"
+                android:text="Allow camera" />
+
+            <Button
+                android:id="@+id/openAccessibilityButton"
+                style="@style/Widget.MaterialComponents.Button.OutlinedButton"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="8dp"
+                android:text="Turn on Accessibility permission" />
+
+            <Button
+                android:id="@+id/openOverlayButton"
+                style="@style/Widget.MaterialComponents.Button.OutlinedButton"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="8dp"
+                android:text="Allow display over other apps" />
+
+            <Button
+                android:id="@+id/openBatteryButton"
+                style="@style/Widget.MaterialComponents.Button.OutlinedButton"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="8dp"
+                android:text="Stop the system killing Air Sensor" />
+
+            <TextView
+                android:id="@+id/batteryHintText"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="6dp"
+                android:text="@string/battery_hint"
+                android:textAppearance="@style/TextAppearance.AirSensor.Hint" />
+
+            <Button
+                android:id="@+id/restrictedSettingsButton"
+                style="@style/Widget.MaterialComponents.Button.TextButton"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="4dp"
+                android:text="&quot;App was denied access&quot;?" />
+        </LinearLayout>
+
+        <!-- Gesture control on/off ............................................... -->
+        <LinearLayout
+            style="@style/Widget.AirSensor.Card"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:layout_marginTop="8dp"
-            android:nestedScrollingEnabled="false" />
+            android:orientation="vertical">
 
-        <TextView
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:layout_marginTop="24dp"
-            android:text="Face gesture mapping"
-            android:textColor="@color/onSurface"
-            android:textSize="18sp"
-            android:textStyle="bold" />
+            <com.google.android.material.switchmaterial.SwitchMaterial
+                android:id="@+id/serviceSwitch"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:text="Gesture control"
+                android:textAppearance="@style/TextAppearance.AirSensor.SectionTitle" />
 
-        <TextView
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:layout_marginTop="2dp"
-            android:text="Blink, wink one eye, raise or lower your eyebrows, look left/right, open your mouth, or smile — detected the same way as hand poses."
-            android:textColor="@color/muted"
-            android:textSize="12sp" />
+            <Button
+                android:id="@+id/addTileButton"
+                style="@style/Widget.MaterialComponents.Button.OutlinedButton"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="12dp"
+                android:text="Add Quick Settings tile" />
 
-        <androidx.recyclerview.widget.RecyclerView
-            android:id="@+id/faceMappingList"
+            <TextView
+                android:id="@+id/tileHintText"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="6dp"
+                android:text="@string/tile_hint"
+                android:textAppearance="@style/TextAppearance.AirSensor.Hint" />
+        </LinearLayout>
+
+        <!-- What gets detected .................................................. -->
+        <LinearLayout
+            style="@style/Widget.AirSensor.Card"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:layout_marginTop="8dp"
-            android:nestedScrollingEnabled="false" />
+            android:orientation="vertical">
 
-        <TextView
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:layout_marginTop="24dp"
-            android:text="Wave gesture mapping"
-            android:textColor="@color/onSurface"
-            android:textSize="18sp"
-            android:textStyle="bold" />
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="What to detect"
+                android:textAppearance="@style/TextAppearance.AirSensor.SectionTitle" />
 
-        <TextView
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:layout_marginTop="2dp"
-            android:text="Wave your hand over the top of the phone, near the earpiece. Hold it there and nothing happens — that's a pocket, not a wave."
-            android:textColor="@color/muted"
-            android:textSize="12sp" />
+            <com.google.android.material.switchmaterial.SwitchMaterial
+                android:id="@+id/handGestureSwitch"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="10dp"
+                android:text="Hand gestures" />
 
-        <androidx.recyclerview.widget.RecyclerView
-            android:id="@+id/waveMappingList"
+            <com.google.android.material.switchmaterial.SwitchMaterial
+                android:id="@+id/faceGestureSwitch"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="4dp"
+                android:text="Face gestures" />
+
+            <TextView
+                android:id="@+id/speedHintText"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="6dp"
+                android:textAppearance="@style/TextAppearance.AirSensor.Hint" />
+
+            <com.google.android.material.switchmaterial.SwitchMaterial
+                android:id="@+id/waveGestureSwitch"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="12dp"
+                android:text="Wave gestures (proximity sensor)" />
+
+            <TextView
+                android:id="@+id/waveHintText"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="6dp"
+                android:textAppearance="@style/TextAppearance.AirSensor.Hint" />
+        </LinearLayout>
+
+        <!-- On-screen extras .................................................... -->
+        <LinearLayout
+            style="@style/Widget.AirSensor.Card"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:layout_marginTop="8dp"
-            android:nestedScrollingEnabled="false" />
+            android:orientation="vertical">
+
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="On screen"
+                android:textAppearance="@style/TextAppearance.AirSensor.SectionTitle" />
+
+            <com.google.android.material.switchmaterial.SwitchMaterial
+                android:id="@+id/bubbleSwitch"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="10dp"
+                android:text="Floating air bubble" />
+
+            <TextView
+                android:id="@+id/bubbleHintText"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="6dp"
+                android:text="@string/bubble_hint"
+                android:textAppearance="@style/TextAppearance.AirSensor.Hint" />
+
+            <com.google.android.material.switchmaterial.SwitchMaterial
+                android:id="@+id/pointerSwitch"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="12dp"
+                android:text="Blue finger pointer" />
+
+            <TextView
+                android:id="@+id/pointerHintText"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="6dp"
+                android:text="@string/pointer_hint"
+                android:textAppearance="@style/TextAppearance.AirSensor.Hint" />
+        </LinearLayout>
+
+        <!-- Battery ............................................................. -->
+        <LinearLayout
+            style="@style/Widget.AirSensor.Card"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="vertical">
+
+            <com.google.android.material.switchmaterial.SwitchMaterial
+                android:id="@+id/batterySaverSwitch"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:text="Pause while the screen is off"
+                android:textAppearance="@style/TextAppearance.AirSensor.SectionTitle" />
+
+            <TextView
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="6dp"
+                android:text="@string/screen_off_hint"
+                android:textAppearance="@style/TextAppearance.AirSensor.Hint" />
+        </LinearLayout>
+
+        <!-- Customise ........................................................... -->
+        <LinearLayout
+            style="@style/Widget.AirSensor.Card"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="vertical">
+
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="Gestures"
+                android:textAppearance="@style/TextAppearance.AirSensor.SectionTitle" />
+
+            <Button
+                android:id="@+id/gestureMappingButton"
+                style="@style/Widget.MaterialComponents.Button"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="12dp"
+                android:text="Gesture mapping" />
+
+            <Button
+                android:id="@+id/gestureGuideButton"
+                style="@style/Widget.MaterialComponents.Button.OutlinedButton"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="8dp"
+                android:text="Gesture guide" />
+        </LinearLayout>
 
     </LinearLayout>
 </ScrollView>

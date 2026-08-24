@@ -132,6 +132,13 @@ one-time model download. Targets Android 12+ (`minSdk 31`).
   screen.
 - An optional **floating status bubble** (the "draw over other apps" permission) confirms the
   service is watching and gives a one-tap way back into the app, from anywhere.
+- A **Quick Settings tile** ("Air gestures") switches detection on and off from the pull-down
+  shade, next to Wi-Fi and Torch — no need to open the app. Tap **Add Quick Settings tile** in
+  the app to have Android offer to place it (Android 13+; on Android 12, add it by hand from
+  the shade's edit screen). The tile mirrors the service's real state rather than its own, so
+  it stays correct when the service is started from the app or stopped by the system, and it
+  greys out as *Setup needed* until Camera and Accessibility are granted. Adding the tile does
+  not grant anything: it is only a switch for what the app already has permission to do.
 - The app can request exemption from OEM battery optimization, which otherwise tends to kill
   background services on skins like ColorOS/Realme UI and MIUI.
 
@@ -205,10 +212,23 @@ to perform it, and its current mapped action.
   screen off (device admin)** and accept a deliberately scary-looking system dialog. The policy
   file requests *force-lock only*: no data wipe, no password control. Without the grant the
   gesture is a silent no-op. Revoke any time in Settings → Security → Device admin apps.
-- **The "install unknown sources" / overlay warning on banking apps is not a bug.** Android
-  deliberately blocks overlay windows (and warns about them) on screens a banking/finance app
-  marks as secure, to stop tapjacking-style attacks — the exact pattern used by overlay
-  malware. This app does not attempt to bypass that protection, and won't.
+- **Banking and UPI apps will refuse to pay while gesture control is on. That is correct, and
+  it is not a bug.** Google Pay, PhonePe, Paytm and bank apps check, before every payment,
+  whether an accessibility service is enabled or a window is drawn over the screen — and refuse
+  with something like *"Your payment is declined for security reasons."* if either is true. The
+  reason is straightforward: an accessibility service can read the screen and inject taps, and
+  an overlay can cover the real PIN pad with a fake one. That is precisely how UPI-fraud apps
+  drain accounts, and the payment app cannot tell Air Sensor apart from one. Air Sensor asks
+  for both of those permissions, so it trips the check.
+
+  **To pay: switch gestures off, pay, switch them back on.** The Quick Settings tile makes this
+  two taps. If a payment is still declined with the service stopped, also turn off the floating
+  bubble in the app, and if it *still* declines, turn Air Sensor's Accessibility permission off
+  in Settings → Accessibility for the duration — some apps check whether the permission is
+  granted at all, not just whether the service is running.
+
+  This app does not attempt to bypass that protection, and won't. Anything that hid Air Sensor
+  from those checks would be, functionally, exactly the technique overlay malware uses.
 - **Latency is tuned per gesture, and is not literally zero.** Camera exposure, model
   inference, and gesture dispatch each cost real milliseconds. What's controllable is the frame
   budget, and that dominates everything: the debounce counts *frames*, so the frame rate sets
@@ -269,6 +289,13 @@ class of app (Camera + Accessibility + Overlay + background-run permissions toge
 spyware to an automated scanner, even though this is exactly what a gesture-control app needs).
 To install anyway: **Play Store → profile icon → Play Protect → gear icon → turn off "Scan
 apps with Play Protect"**, install, then turn scanning back on.
+
+### Signing key
+
+Release builds are signed with a key held in GitHub Actions secrets, never in this repository —
+see [docs/SIGNING.md](docs/SIGNING.md) for the one-time setup. Until those secrets exist, CI
+produces `app-release-unsigned.apk`, which a phone cannot install; use `app-debug.apk` for
+sideloading in the meantime.
 
 ### Build it yourself
 

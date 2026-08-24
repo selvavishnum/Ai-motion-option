@@ -8,3 +8,11 @@ captures/
 .externalNativeBuild/
 .cxx/
 local.properties
+
+# Signing keys never belong in the repository. One was committed here once, with its password
+# in build.gradle.kts, and anyone holding it can sign an update that every installed copy
+# accepts as genuine. The build reads the key from RELEASE_KEYSTORE_* environment variables
+# instead; these patterns exist so a stray local copy cannot be added back by accident.
+*.keystore
+*.jks
+keystore.properties

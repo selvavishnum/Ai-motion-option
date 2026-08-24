@@ -1,32 +1,33 @@
 # Gesture Mapping UI — Component Architecture
 
-A production-grade rewrite of the gesture→action mapping settings screen, built in Jetpack
-Compose under `app/src/main/java/com/aimotion/handsfree/ui/mapping/`. Reachable from the main
-screen via **"Gesture mapping (new UI, beta)"**.
+The gesture→action mapping screen, built in Jetpack Compose under
+`app/src/main/java/com/aimotion/handsfree/ui/mapping/` and hosted by `GestureMappingActivity`.
+Reachable from the main screen via **"Gesture mapping"**.
 
-## Why a rewrite, and why it's additive (not a replacement) for now
+## One screen, not two
 
-The original mapping list is a `RecyclerView` + XML `Spinner`-based screen wired directly into
-`MainActivity`. It works, but isn't reusable, isn't easily testable/previewable in isolation,
-and uses `Spinner` — one of the least accessible standard Android widgets (poor TalkBack focus
-order, no easy way to show "why" a choice is disabled).
+This started as an additive rewrite: the original mapping UI was a `RecyclerView` + `Spinner`
+table wired directly into `MainActivity`, and this Compose version shipped alongside it behind a
+separate "(new UI, beta)" button rather than replacing a screen already verified on a real
+device — the same gradual-rollout call a production team makes with a feature flag, made because
+this environment cannot compile-test Android code locally.
 
-This rewrite ships as a **separate entry point** (`GestureMappingComposeActivity`), not a
-replacement of the working screen, for one reason: this environment cannot compile-test Android
-code locally (network policy blocks Google's Maven repo), so every previous native-code change
-in this project has gone through a CI-catches-it fix cycle before being confirmed correct. The
-existing screen is already verified working on a real device. Shipping the new one alongside it
-— rather than deleting a known-good screen in favor of an unverified one — is the same
-"gradual rollout" judgment call a production team makes with a feature flag. Once this build is
-confirmed working on-device, `MainActivity` can link directly to it and the old screen retires.
+That rollout is finished. The old screen is gone and this one absorbed the wave/proximity
+mappings it uniquely covered, so all three trigger modalities — hand, face and wave — are
+remapped in one place. Two implementations of the same settings meant two places to fix a bug
+and two chances for them to disagree about what the user had chosen.
+
+`Spinner`, which the old screen used, is one of the least accessible standard Android widgets
+(poor TalkBack focus order, no way to explain why a choice is disabled). That matters more than
+usual in an app whose whole purpose is accessibility.
 
 ## Component architecture
 
 ```
 ui/mapping/
 ├── MappingModels.kt          — MappingItem, InstalledApp, MappingUiState (data, no UI)
-├── GestureMappingViewModel.kt — loads/saves both mapping stores, publishes MappingUiState
-├── MappingTheme.kt            — Material3 theme wrapper (dark now, light-ready)
+├── GestureMappingViewModel.kt — loads/saves all three mapping stores, publishes MappingUiState
+├── MappingTheme.kt            — Material3 theme wrapper (paper-white, light-only)
 ├── MappingStateViews.kt       — LoadingState, EmptyState, ErrorState (generic, reusable)
 ├── ActionDropdown.kt          — accessible single-select dropdown for ActionType
 ├── MappingRow.kt              — one gesture's row: emoji + label + ActionDropdown + app button
@@ -36,7 +37,7 @@ ui/mapping/
 ```
 
 ```
-GestureMappingComposeActivity
+GestureMappingActivity
   └── MappingTheme
         └── GestureMappingScreen (state: Loading | Error | Content)
               ├── LoadingState / ErrorState / EmptyState   (state != Content.notEmpty)
@@ -44,7 +45,9 @@ GestureMappingComposeActivity
                     ├── mappingSection("Hand gestures", …)
                     │     └── MappingRow × N
                     │           └── ActionDropdown
-                    └── mappingSection("Face gestures", …)
+                    ├── mappingSection("Face gestures", …)
+                    │     └── MappingRow × N
+                    └── mappingSection("Wave gestures", …)
                           └── MappingRow × N
               └── AppPickerSheet (shown conditionally, on top)
 ```
@@ -64,15 +67,15 @@ and `MappingRow.kt`) without a running app, ViewModel, or device.
 | `EmptyState(emoji, title, body, action?)` | data-only + optional trailing composable slot | The `action` slot lets a caller add a retry/CTA button without the component knowing what it does. |
 | `ErrorState(message, onRetry)` | `message: String`, `onRetry: () -> Unit` | Always requires a retry path — an error state with no way forward is a dead end for the user. |
 | `ActionDropdown(selected, options, onSelected)` | fully controlled | No internal "current value" state; the caller re-renders with the new `selected` after `onSelected` fires. This is what makes it safe to reuse across hand- and face-gesture rows without them getting out of sync. |
-| `MappingRow(item, actionOptions, onActionSelected, onChooseApp)` | `item: MappingItem` (data), two callbacks | Takes the *generic* `MappingItem`, not `Gesture`/`FaceGesture` — this one component renders both mapping sections. |
+| `MappingRow(item, actionOptions, onActionSelected, onChooseApp)` | `item: MappingItem` (data), two callbacks | Takes the *generic* `MappingItem`, not `Gesture`/`FaceGesture`/`ProximityGesture` — this one component renders all three mapping sections. |
 | `mappingSection(title, subtitle, items, …)` | `LazyListScope` extension, not a `@Composable` | Sections share one `LazyColumn` (see below) instead of nesting scrollables. |
 | `AppPickerSheet(apps, onDismiss, onAppSelected)` | `apps: List<InstalledApp>` (pre-fetched) | The sheet has zero Android-framework knowledge — it doesn't call `PackageManager` itself, keeping it trivially previewable with fake data. |
 
 **Why `MappingItem` instead of passing `Gesture`/`FaceGesture` directly into the components:**
 this is the crux of the reusability. Every visual component in this system knows about exactly
-one shape — id/emoji/label/action — never about the two different domain enums. Adding a third
-trigger modality later (e.g. a physical button, a voice command) means writing one mapper
-function into `MappingItem`, not touching a single Compose file.
+one shape — id/emoji/label/action — never about the three different domain enums. Adding the third
+trigger modality — wave, via the proximity sensor — meant writing one mapper function into
+`MappingItem` and one more `mappingSection` call. Not one Compose component changed.
 
 ## Handling the required production states
 
@@ -149,9 +152,9 @@ when (someOtherScreenState) {
 3. **Previews for every visual component**, so a developer can iterate on a row's design
    without running the app, granting camera/accessibility permissions, or waiting for the
    camera pipeline to start.
-4. **No premature abstraction beyond what two call sites (hand + face gestures) justify** — the
-   generic `MappingItem`/`MappingRow` pattern exists because it already has two real
-   consumers, not speculatively for a third that doesn't exist yet.
+4. **No premature abstraction beyond what real call sites justify** — the generic
+   `MappingItem`/`MappingRow` pattern existed for two real consumers (hand + face) before wave
+   arrived, never speculatively for one that didn't exist. Wave then cost a mapper function.
 5. **Reads/writes go through `Dispatchers.IO`** even though today's storage (SharedPreferences)
    is fast enough not to need it — so the persistence layer can change without ever touching
    this UI code.

@@ -1,9 +1,24 @@
 <?xml version="1.0" encoding="utf-8"?>
+<!--
+  Declared as narrowly as the service actually behaves, because on Play this file is evidence.
+
+  - isAccessibilityTool="true": this service exists to let people who cannot reliably touch the
+    screen operate their phone. That is the only use of the accessibility APIs Play permits, and
+    this flag is how an app states it.
+  - accessibilityEventTypes is absent, which is how a service subscribes to nothing: the flag set
+    has no "none" value (aapt rejects typeNone), and an omitted attribute means zero event types.
+    The service never *observes* anything — it only injects gestures and global actions on command
+    from GestureControlService. Requesting typeAllMask, as this used to, asked the system to
+    deliver every UI event in every app and then threw them all away: a permission surface with no
+    purpose behind it.
+  - canRetrieveWindowContent="false": screen content is never read. Nothing here can see what is
+    on screen, in this app or any other.
+-->
 <accessibility-service xmlns:android="http://schemas.android.com/apk/res/android"
-    android:accessibilityEventTypes="typeAllMask"
     android:accessibilityFeedbackType="feedbackGeneric"
     android:accessibilityFlags="flagDefault"
     android:canPerformGestures="true"
     android:canRetrieveWindowContent="false"
+    android:isAccessibilityTool="true"
     android:notificationTimeout="100"
     android:description="@string/accessibility_service_description" />

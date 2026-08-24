@@ -9,9 +9,6 @@
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
     <!-- Floating status bubble, shown over other apps while gesture control is running. -->
     <uses-permission android:name="android.permission.SYSTEM_ALERT_WINDOW" />
-    <!-- Lets the app ask the OEM battery manager not to kill its background service — needed
-         on aggressive skins like ColorOS/Realme UI and MIUI. -->
-    <uses-permission android:name="android.permission.REQUEST_IGNORE_BATTERY_OPTIMIZATIONS" />
     <!-- Briefly wakes the display for the "open palm" gesture. -->
     <uses-permission android:name="android.permission.WAKE_LOCK" />
 
@@ -49,15 +46,7 @@
             android:exported="false" />
 
         <activity
-            android:name=".GestureMappingComposeActivity"
-            android:exported="false" />
-
-        <activity
-            android:name=".ui.paper.PaperShowcaseActivity"
-            android:exported="false" />
-
-        <activity
-            android:name=".SensorListActivity"
+            android:name=".GestureMappingActivity"
             android:exported="false" />
 
         <service
@@ -69,19 +58,22 @@
             android:name=".overlay.OverlayBubbleService"
             android:exported="false" />
 
-        <!-- Force-lock device admin, used only by the "screen off" gesture (see
-             AirSensorDeviceAdminReceiver). Inert until the user activates it in Settings. -->
-        <receiver
-            android:name=".gesture.AirSensorDeviceAdminReceiver"
-            android:permission="android.permission.BIND_DEVICE_ADMIN"
+        <!-- Quick Settings tile, so gestures can be switched on from the notification shade
+             without opening the app. Must be exported and hold BIND_QUICK_SETTINGS_TILE: System
+             UI binds it, and that permission is what stops anything else from doing so. -->
+        <service
+            android:name=".gesture.GestureTileService"
+            android:label="@string/tile_label"
+            android:icon="@drawable/ic_tile_air_sensor"
+            android:permission="android.permission.BIND_QUICK_SETTINGS_TILE"
             android:exported="true">
-            <meta-data
-                android:name="android.app.device_admin"
-                android:resource="@xml/device_admin" />
             <intent-filter>
-                <action android:name="android.app.action.DEVICE_ADMIN_ENABLED" />
+                <action android:name="android.service.quicksettings.action.QS_TILE" />
             </intent-filter>
-        </receiver>
+            <!-- Deliberately NOT declaring TOGGLEABLE_TILE: that would let the tile be switched
+                 on from the lock screen without unlocking, and this one starts a service that
+                 drives the accessibility APIs. Requiring an unlock first costs one swipe. -->
+        </service>
 
         <service
             android:name=".gesture.GestureAccessibilityService"

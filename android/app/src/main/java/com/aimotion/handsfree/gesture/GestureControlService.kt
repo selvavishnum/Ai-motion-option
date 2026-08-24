@@ -75,6 +75,11 @@ private const val TRACKPAD_MOVE_THRESHOLD = 0.055f // normalized (0..1) coordina
 private const val TRACKPAD_COOLDOWN_MS = 90L
 private const val TRACKPAD_HOLD_FRAMES_FOR_TAP = 4
 
+/** How many consecutive frames without a recognised POINT before a trackpad stroke is abandoned.
+ * See maybeResetTrackpad — a single flickered frame used to discard the whole accumulated
+ * movement. */
+private const val TRACKPAD_DROPOUT_GRACE_FRAMES = 3
+
 // Air pointer. Your hand only travels comfortably across the middle of the camera's view, so
 // that band is stretched to cover the whole screen — mapping the full frame would mean reaching
 // far to one side just to touch the edge of the display, and never quite getting to the corners.
@@ -135,6 +140,7 @@ class GestureControlService : LifecycleService() {
     private val trackpadTracker = DirectionalMotionTracker(TRACKPAD_MOVE_THRESHOLD)
     private var lastTrackpadFiredAtMs = 0L
     private var trackpadTapped = false
+    private var trackpadDropoutFrames = 0
 
     private val headTracker = DirectionalMotionTracker(HEAD_MOVE_THRESHOLD)
     private var lastHeadFiredAtMs = 0L
@@ -176,6 +182,9 @@ class GestureControlService : LifecycleService() {
         // MainActivity happens to be open — a no-op if the overlay permission isn't granted,
         // and skipped entirely when the user has hidden the dot.
         if (toggles.bubbleEnabled) OverlayBubbleService.start(this)
+        // Last, so the flag only ever means "set up and watching". If anything above throws, the
+        // service never reports itself running and the tile stays off — which is the truth.
+        setRunning(true)
     }
 
     /**
@@ -226,6 +235,7 @@ class GestureControlService : LifecycleService() {
 
     override fun onDestroy() {
         super.onDestroy()
+        setRunning(false)
         runCatching { unregisterReceiver(screenStateReceiver) }
         proximityDetector?.stop()
         proximityDetector = null
@@ -408,17 +418,18 @@ class GestureControlService : LifecycleService() {
                 candidateGesture = Gesture.UNKNOWN
                 candidateStreak = 0
                 lastPinchDistance = null
+                trackpadDropoutFrames = 0
                 handleFingerTrackpad(result)
             }
             Gesture.UNKNOWN -> {
                 handleDetectedGesture(Gesture.UNKNOWN)
                 handlePinchTracking(result)
-                resetTrackpad()
+                maybeResetTrackpad()
             }
             else -> {
                 handleDetectedGesture(top)
                 lastPinchDistance = null
-                resetTrackpad()
+                maybeResetTrackpad()
             }
         }
     }
@@ -507,6 +518,20 @@ class GestureControlService : LifecycleService() {
         Direction.RIGHT -> ActionType.SWIPE_RIGHT
         Direction.UP -> ActionType.SWIPE_UP
         Direction.DOWN -> ActionType.SWIPE_DOWN
+    }
+
+    /**
+     * Ends a trackpad stroke only after the pose has been gone for several frames.
+     *
+     * Resetting on the first non-POINT frame defeated the whole point of accumulating
+     * displacement: pose classification flickers for a frame or two during a fast sweep — motion
+     * blur, the hand tilting, part of it leaving the camera's view — and each flicker threw away
+     * every bit of travel measured so far, so the threshold was never reached. Tolerating a brief
+     * dropout is what lets a real movement survive being momentarily unrecognisable.
+     */
+    private fun maybeResetTrackpad() {
+        trackpadDropoutFrames++
+        if (trackpadDropoutFrames >= TRACKPAD_DROPOUT_GRACE_FRAMES) resetTrackpad()
     }
 
     private fun resetTrackpad() {
@@ -684,7 +709,26 @@ class GestureControlService : LifecycleService() {
             .build()
     }
 
+    /** Kept next to the flag so no caller can flip it without the tile being told. */
+    private fun setRunning(running: Boolean) {
+        isRunning = running
+        GestureTileService.requestUpdate(this)
+    }
+
     companion object {
+        /**
+         * Whether an instance is alive. Android offers no supported way to ask "is my service
+         * running" — `getRunningServices` is deprecated and returns only this app's services on
+         * modern releases — so the service reports it itself. The process hosts exactly one
+         * instance, and if the process dies the flag dies with it, which is the right answer.
+         *
+         * Volatile because the Quick Settings tile reads it on the main thread while onCreate /
+         * onDestroy may be running from a different one.
+         */
+        @Volatile
+        var isRunning: Boolean = false
+            private set
+
         fun start(context: Context) {
             ContextCompat.startForegroundService(context, Intent(context, GestureControlService::class.java))
         }

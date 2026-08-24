@@ -29,8 +29,9 @@ import com.aimotion.handsfree.gesture.GestureAction
 import kotlinx.coroutines.launch
 
 /**
- * The full gesture-mapping screen: loading/empty/error handling, then two sections (hand and
- * face gestures) sharing one scrollable list, plus the app picker sheet for Launch-app actions.
+ * The full gesture-mapping screen: loading/empty/error handling, then three sections (hand, face
+ * and wave triggers) sharing one scrollable list, plus the app picker sheet for Launch-app
+ * actions. Every trigger the app can detect is remapped here and nowhere else.
  *
  * This composable owns no business logic itself — it renders whatever [GestureMappingViewModel]
  * publishes and forwards user actions back to it, so it (and every component it's built from)
@@ -105,8 +106,17 @@ fun GestureMappingScreen(
                     )
                     mappingSection(
                         title = "Face gestures",
-                        subtitle = "Blink, raised eyebrows, open mouth, or a smile.",
+                        subtitle = "Blink, wink, raised eyebrows, gaze, or a head turn.",
                         items = state.faceItems,
+                        onActionSelected = { item, action ->
+                            viewModel.applyAction(item.id, resolveNewAction(item.action, action))
+                        },
+                        onChooseApp = { item -> appPickerTargetId = item.id },
+                    )
+                    mappingSection(
+                        title = "Wave gestures",
+                        subtitle = "Proximity sensor, not the camera — these keep working while the screen is off.",
+                        items = state.waveItems,
                         onActionSelected = { item, action ->
                             viewModel.applyAction(item.id, resolveNewAction(item.action, action))
                         },

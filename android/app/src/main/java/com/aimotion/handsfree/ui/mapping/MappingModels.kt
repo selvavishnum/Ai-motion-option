@@ -29,7 +29,9 @@ sealed interface MappingUiState {
     data class Content(
         val handItems: List<MappingItem>,
         val faceItems: List<MappingItem>,
+        val waveItems: List<MappingItem>,
     ) : MappingUiState {
-        val isEmpty: Boolean get() = handItems.isEmpty() && faceItems.isEmpty()
+        val isEmpty: Boolean
+            get() = handItems.isEmpty() && faceItems.isEmpty() && waveItems.isEmpty()
     }
 }

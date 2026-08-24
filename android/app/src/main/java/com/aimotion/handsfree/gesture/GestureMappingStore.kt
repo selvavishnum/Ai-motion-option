@@ -40,8 +40,13 @@ class GestureMappingStore(context: Context) {
             MAPPABLE_GESTURES.associateWith { gesture ->
                 val entry = json.optJSONObject(gesture.name)
                     ?: return@associateWith DEFAULT_MAPPING.getValue(gesture)
+                // An action type this build no longer has (LOCK_SCREEN, removed with device
+                // admin) falls back to the default for that trigger alone, rather than throwing
+                // and taking every other saved mapping down with it.
+                val type = actionTypeOrNull(entry.getString("type"))
+                    ?: return@associateWith DEFAULT_MAPPING.getValue(gesture)
                 GestureAction(
-                    type = ActionType.valueOf(entry.getString("type")),
+                    type = type,
                     packageName = entry.optString("packageName").ifEmpty { null },
                 )
             }

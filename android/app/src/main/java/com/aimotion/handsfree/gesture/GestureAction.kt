@@ -10,13 +10,17 @@ enum class ActionType {
 
     /** Briefly wakes the display (a real, legitimate wake-lock, same mechanism alarm apps use). */
     WAKE_SCREEN,
-
-    /** Turns the screen off, via DevicePolicyManager.lockNow(). Android gives an ordinary app no
-     * API for this, so it needs the separate "Activate device admin" grant (force-lock only —
-     * see AirSensorDeviceAdminReceiver). Without that grant this action does nothing, so the
-     * app surfaces a button to turn it on rather than failing silently. */
-    LOCK_SCREEN,
 }
+
+/**
+ * Resolves a stored action-type name, returning null for one this build no longer has.
+ *
+ * [ActionType.valueOf] throws on an unknown name, which matters because saved mappings outlive
+ * the enum: LOCK_SCREEN was removed when device admin was dropped, so an upgrading user has
+ * "LOCK_SCREEN" written in their preferences. Without this, every store's parse would throw and
+ * discard the user's *entire* mapping rather than the one entry that no longer resolves.
+ */
+fun actionTypeOrNull(name: String): ActionType? = ActionType.entries.firstOrNull { it.name == name }
 
 data class GestureAction(val type: ActionType, val packageName: String? = null) {
     fun describe(): String = when (type) {
@@ -31,7 +35,7 @@ data class GestureAction(val type: ActionType, val packageName: String? = null) 
  * remappable table — see GestureControlService's finger-trackpad tracking. */
 val DEFAULT_MAPPING: Map<Gesture, GestureAction> = mapOf(
     Gesture.OPEN_PALM to GestureAction(ActionType.WAKE_SCREEN),
-    Gesture.FIST to GestureAction(ActionType.LOCK_SCREEN),
+    Gesture.FIST to GestureAction(ActionType.HOME),
     Gesture.PEACE to GestureAction(ActionType.SWIPE_RIGHT),
     Gesture.THUMBS_UP to GestureAction(ActionType.SWIPE_UP),
     Gesture.THUMBS_DOWN to GestureAction(ActionType.SWIPE_DOWN),

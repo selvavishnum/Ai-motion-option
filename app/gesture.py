@@ -52,9 +52,21 @@ _FINGER_TIP_PIP = (
 NUM_LANDMARKS = 21
 
 
+def _distance_sq(a: Point, b: Point) -> float:
+    return (a.x - b.x) ** 2 + (a.y - b.y) ** 2
+
+
 def _finger_extended(landmarks: list[Point], tip: int, pip: int) -> bool:
-    # Image y grows downward, so an extended (raised) finger has its tip above its pip joint.
-    return landmarks[tip].y < landmarks[pip].y
+    # An extended finger reaches further from the wrist than its own middle joint does; a curled
+    # one folds the tip back toward the palm, bringing it closer.
+    #
+    # This used to compare image y ("tip is above the pip"), which silently required the hand to
+    # be pointing roughly upward. Point the finger downward — as happens naturally when sweeping
+    # a hand downward — and the tip falls below the pip, the finger reads as curled, and the pose
+    # stops being recognised at all. Distance from the wrist carries the same meaning without
+    # caring which way the hand is oriented.
+    wrist = landmarks[WRIST]
+    return _distance_sq(landmarks[tip], wrist) > _distance_sq(landmarks[pip], wrist)
 
 
 def _thumb_extended(landmarks: list[Point], handedness: Handedness) -> bool:
