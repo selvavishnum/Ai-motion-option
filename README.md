@@ -204,6 +204,18 @@ defaults so the two don't collide):
 Tap **Gesture guide** in the app for a visual cheat-sheet of every hand and face gesture, how
 to perform it, and its current mapped action.
 
+### Gesture sensitivity
+
+One dial, 1 (least sensitive) to 5 (most), on the main screen. It rescales every movement
+threshold and the pose debounce together — a lower movement threshold lets noisier input through
+to the classifier, which is exactly when more frames of confirmation are worth paying for.
+
+It is one control rather than the six numbers it drives because the complaint behind it is always
+one of two things: *"it triggers when I didn't mean to"* (lower it) or *"I have to move miles
+before it notices"* (raise it). Level 3 is the default and reproduces the behaviour from before
+the setting existed. The running service re-reads it every frame, so dragging the slider retunes
+detection live.
+
 ### Known limitations (by design, not bugs)
 
 - **"Screen off" needs a device-admin grant.** Android gives an ordinary app no API to turn the

@@ -25,12 +25,14 @@ enum class Direction { LEFT, RIGHT, UP, DOWN }
  *    produces nothing rather than a guess.
  *
  * @param moveThreshold displacement, in the caller's units, required before a direction fires.
+ *   Mutable and volatile because the sensitivity setting rescales it while detection is running,
+ *   from a different thread than the one feeding observations in.
  * @param smoothing low-pass factor in 0..1. Lower is steadier but laggier; 0.5 halves the jitter
  *   while staying responsive within a couple of frames.
  * @param axisDominance how much the winning axis must exceed the other. 1.0 accepts any diagonal.
  */
 class DirectionalMotionTracker(
-    private val moveThreshold: Float,
+    @Volatile var moveThreshold: Float,
     private val smoothing: Float = 0.5f,
     private val axisDominance: Float = 1.5f,
 ) {

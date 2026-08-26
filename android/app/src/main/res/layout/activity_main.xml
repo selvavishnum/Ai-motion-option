@@ -9,6 +9,7 @@
   three RecyclerViews nested in a ScrollView both scrolled badly and buried the settings above them.
 -->
 <ScrollView xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
     android:layout_width="match_parent"
     android:layout_height="match_parent"
     android:background="@color/background"
@@ -186,6 +187,44 @@
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
                 android:layout_marginTop="6dp"
+                android:textAppearance="@style/TextAppearance.AirSensor.Hint" />
+        </LinearLayout>
+
+        <!-- Sensitivity ......................................................... -->
+        <LinearLayout
+            style="@style/Widget.AirSensor.Card"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="vertical">
+
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="Gesture sensitivity"
+                android:textAppearance="@style/TextAppearance.AirSensor.SectionTitle" />
+
+            <TextView
+                android:id="@+id/sensitivityValueText"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="6dp"
+                android:textAppearance="@style/TextAppearance.AirSensor.Hint" />
+
+            <com.google.android.material.slider.Slider
+                android:id="@+id/sensitivitySlider"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="4dp"
+                android:contentDescription="Gesture sensitivity, 1 least to 5 most"
+                android:stepSize="1"
+                android:valueFrom="1"
+                android:valueTo="5"
+                app:tickVisible="true" />
+
+            <TextView
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:text="@string/sensitivity_hint"
                 android:textAppearance="@style/TextAppearance.AirSensor.Hint" />
         </LinearLayout>
 
