@@ -316,6 +316,21 @@
                 android:text="Gesture mapping" />
 
             <Button
+                android:id="@+id/gestureTrainingButton"
+                style="@style/Widget.MaterialComponents.Button.OutlinedButton"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="8dp"
+                android:text="Teach your gestures" />
+
+            <TextView
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="6dp"
+                android:text="@string/training_hint"
+                android:textAppearance="@style/TextAppearance.AirSensor.Hint" />
+
+            <Button
                 android:id="@+id/gestureGuideButton"
                 style="@style/Widget.MaterialComponents.Button.OutlinedButton"
                 android:layout_width="match_parent"

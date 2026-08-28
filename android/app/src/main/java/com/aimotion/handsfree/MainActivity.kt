@@ -60,6 +60,9 @@ class MainActivity : AppCompatActivity() {
         binding.gestureMappingButton.setOnClickListener {
             startActivity(Intent(this, GestureMappingActivity::class.java))
         }
+        binding.gestureTrainingButton.setOnClickListener {
+            startActivity(Intent(this, GestureTrainingActivity::class.java))
+        }
         binding.gestureGuideButton.setOnClickListener {
             startActivity(Intent(this, GestureGuideActivity::class.java))
         }

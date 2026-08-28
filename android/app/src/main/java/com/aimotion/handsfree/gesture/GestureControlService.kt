@@ -112,6 +112,7 @@ class GestureControlService : LifecycleService() {
     private lateinit var toggles: GestureToggleStore
     private lateinit var proximityMappingStore: ProximityMappingStore
     private lateinit var sensitivity: SensitivityStore
+    private lateinit var templates: GestureTemplateStore
     private var proximityDetector: ProximityGestureDetector? = null
     private var handLandmarkerHelper: HandLandmarkerHelper? = null
     private var faceLandmarkerHelper: FaceLandmarkerHelper? = null
@@ -173,6 +174,7 @@ class GestureControlService : LifecycleService() {
         toggles = GestureToggleStore(this)
         proximityMappingStore = ProximityMappingStore(this)
         sensitivity = SensitivityStore(this)
+        templates = GestureTemplateStore(this)
         applySensitivity()
         startForeground(NOTIFICATION_ID, buildNotification())
         startProximityDetection()
@@ -439,9 +441,7 @@ class GestureControlService : LifecycleService() {
         // you have formed a gesture the loop is already back at full rate.
         if (result.landmarks().isNotEmpty()) lastSubjectSeenAtMs = SystemClock.elapsedRealtime()
 
-        // topGesture() rather than toGestures(): the detector tracks a single hand and only the
-        // first result was ever read, so building a list and a Pair per frame was garbage.
-        val top = result.topGesture()
+        val top = classifyHand(result)
 
         when (top) {
             // A single extended index finger drives the continuous mini-trackpad below instead
@@ -464,6 +464,31 @@ class GestureControlService : LifecycleService() {
                 maybeResetTrackpad()
             }
         }
+    }
+
+    /**
+     * Turns this frame's hand into a gesture, and fills a training request if one is running.
+     *
+     * The user's own recorded shapes are tried first and the rule-based classifier is the
+     * fallback, not the other way round: where someone has demonstrated what *their* fist looks
+     * like, that beats a rule tuned on somebody else's hand. [GestureTemplateStore.classify]
+     * returns null whenever the match isn't clearly good, so a half-formed or unfamiliar pose
+     * still gets the rules rather than a guess.
+     *
+     * Recording happens here, before classification, because a gesture being taught is by
+     * definition one the current classifier gets wrong — waiting for it to be recognised first
+     * would make the feature useless for exactly the hands that need it.
+     */
+    private fun classifyHand(
+        result: com.google.mediapipe.tasks.vision.handlandmarker.HandLandmarkerResult,
+    ): Gesture {
+        val points = result.firstHandPoints() ?: return Gesture.UNKNOWN
+
+        TrainingSession.gestureToCapture()?.let { target ->
+            if (templates.record(target, points)) TrainingSession.onCaptured()
+        }
+
+        return templates.classify(points) ?: classifyGesture(points, result.firstHandedness())
     }
 
     /** A single extended index finger acts as an air mini-trackpad: move it to swipe (turn

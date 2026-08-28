@@ -88,17 +88,27 @@ class HandLandmarkerHelper(
  * garbage on every frame.
  */
 fun HandLandmarkerResult.topGesture(): Gesture {
+    val points = firstHandPoints() ?: return Gesture.UNKNOWN
+    return classifyGesture(points, firstHandedness())
+}
+
+/** The first detected hand's landmarks, or null when there is no usable hand this frame.
+ * Split out of [topGesture] because personalised matching and gesture recording both need the
+ * points themselves, not a verdict about them. */
+fun HandLandmarkerResult.firstHandPoints(): List<Point>? {
     val hands = landmarks()
-    if (hands.isEmpty()) return Gesture.UNKNOWN
+    if (hands.isEmpty()) return null
     val first = hands[0]
-    if (first.size != 21) return Gesture.UNKNOWN
-    val handedness = if (handedness().getOrNull(0)?.firstOrNull()?.categoryName() == "Left") {
+    if (first.size != NUM_LANDMARKS) return null
+    return first.map { Point(it.x(), it.y(), it.z()) }
+}
+
+fun HandLandmarkerResult.firstHandedness(): Handedness =
+    if (handedness().getOrNull(0)?.firstOrNull()?.categoryName() == "Left") {
         Handedness.LEFT
     } else {
         Handedness.RIGHT
     }
-    return classifyGesture(first.map { Point(it.x(), it.y(), it.z()) }, handedness)
-}
 
 /** Every detected hand's gesture. Retained for callers that genuinely need more than the first;
  * the frame loop uses [topGesture]. */
