@@ -328,6 +328,19 @@ spyware to an automated scanner, even though this is exactly what a gesture-cont
 To install anyway: **Play Store → profile icon → Play Protect → gear icon → turn off "Scan
 apps with Play Protect"**, install, then turn scanning back on.
 
+### Publishing to Play
+
+[docs/PLAY_LISTING.md](docs/PLAY_LISTING.md) holds everything Play asks for that is not the
+bundle itself: the Data safety answers and why "collects no data" is the honest one, the
+accessibility permissions declaration to paste, a demo-video script, and the pre-upload
+checklist. [docs/PRIVACY.md](docs/PRIVACY.md) is the privacy policy, ready to publish via GitHub
+Pages (Settings → Pages → main, `/docs`).
+
+The accessibility declaration is effectively the whole submission — everything else in the app's
+configuration exists to make it credible: `isAccessibilityTool="true"`, no window content, no
+event subscription at all, `<queries>` instead of `QUERY_ALL_PACKAGES`, and nothing leaving the
+device.
+
 ### Signing key
 
 Release builds are signed with a key held in GitHub Actions secrets, never in this repository —
