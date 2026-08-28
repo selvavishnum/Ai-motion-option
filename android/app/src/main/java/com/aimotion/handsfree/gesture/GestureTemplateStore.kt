@@ -69,13 +69,20 @@ class GestureTemplateStore(context: Context) {
 
         val centroids = samples
             .filterValues { it.size >= MIN_SAMPLES }
-            .mapValues { (_, recorded) ->
-                val mean = FloatArray(FEATURE_LENGTH)
-                for (sample in recorded) for (i in 0 until FEATURE_LENGTH) mean[i] += sample[i]
-                for (i in 0 until FEATURE_LENGTH) mean[i] /= recorded.size
-                mean
-            }
+            .mapValues { (_, recorded) -> average(recorded) }
         return Templates(samples, centroids)
+    }
+
+    /** Element-wise mean of the recorded feature vectors — the shape the user's hand settles
+     * around, which is what a new frame is measured against. */
+    private fun average(recorded: List<FloatArray>): FloatArray {
+        val mean = FloatArray(FEATURE_LENGTH)
+        for (sample in recorded) {
+            for (i in 0 until FEATURE_LENGTH) mean[i] = mean[i] + sample[i]
+        }
+        val count = recorded.size.toFloat()
+        for (i in 0 until FEATURE_LENGTH) mean[i] = mean[i] / count
+        return mean
     }
 
     private fun save(samples: Map<Gesture, List<FloatArray>>) {
