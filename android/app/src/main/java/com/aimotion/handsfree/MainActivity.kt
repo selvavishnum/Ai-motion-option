@@ -21,6 +21,7 @@ import com.aimotion.handsfree.databinding.ActivityMainBinding
 import com.aimotion.handsfree.gesture.GestureControlService
 import com.aimotion.handsfree.gesture.GestureTileService
 import com.aimotion.handsfree.gesture.GestureToggleStore
+import com.aimotion.handsfree.gesture.SensitivityStore
 import com.aimotion.handsfree.gesture.ServicePrerequisites
 import com.aimotion.handsfree.overlay.OverlayBubbleService
 
@@ -34,6 +35,7 @@ class MainActivity : AppCompatActivity() {
 
     private lateinit var binding: ActivityMainBinding
     private lateinit var toggles: GestureToggleStore
+    private lateinit var sensitivity: SensitivityStore
 
     /** Held as a field so [refreshStatus] can detach it while writing the switch's state. Setting
      * isChecked fires the listener, which would start or stop the service as a side effect of
@@ -53,9 +55,13 @@ class MainActivity : AppCompatActivity() {
         setContentView(binding.root)
 
         toggles = GestureToggleStore(this)
+        sensitivity = SensitivityStore(this)
 
         binding.gestureMappingButton.setOnClickListener {
             startActivity(Intent(this, GestureMappingActivity::class.java))
+        }
+        binding.gestureTrainingButton.setOnClickListener {
+            startActivity(Intent(this, GestureTrainingActivity::class.java))
         }
         binding.gestureGuideButton.setOnClickListener {
             startActivity(Intent(this, GestureGuideActivity::class.java))
@@ -109,6 +115,17 @@ class MainActivity : AppCompatActivity() {
             }
         }
         binding.serviceSwitch.setOnCheckedChangeListener(serviceSwitchListener)
+
+        binding.sensitivitySlider.value = sensitivity.level.toFloat()
+        binding.sensitivityValueText.text = SensitivityStore.labelFor(sensitivity.level)
+        // addOnChangeListener, not a value-committed listener: the running service re-reads the
+        // setting every frame, so dragging the slider retunes detection live and the label can
+        // describe what the user is about to get before they let go.
+        binding.sensitivitySlider.addOnChangeListener { _, value, _ ->
+            val level = value.toInt()
+            sensitivity.level = level
+            binding.sensitivityValueText.text = SensitivityStore.labelFor(level)
+        }
     }
 
     override fun onResume() {

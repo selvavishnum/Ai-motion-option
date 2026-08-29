@@ -21,11 +21,12 @@ enum class Gesture(val label: String) {
     UNKNOWN("unknown"),
 }
 
-private const val WRIST = 0
+/** Shared with HandFeatures/GestureTemplateStore, which index the same MediaPipe topology. */
+const val WRIST = 0
 private const val THUMB_IP = 3
 private const val THUMB_TIP = 4
 private val FINGER_TIP_PIP = listOf(8 to 6, 12 to 10, 16 to 14, 20 to 18) // index, middle, ring, pinky
-private const val NUM_LANDMARKS = 21
+const val NUM_LANDMARKS = 21
 
 private fun distanceSquared(a: Point, b: Point): Float {
     val dx = a.x - b.x

@@ -204,6 +204,44 @@ defaults so the two don't collide):
 Tap **Gesture guide** in the app for a visual cheat-sheet of every hand and face gesture, how
 to perform it, and its current mapped action.
 
+### Gesture sensitivity
+
+One dial, 1 (least sensitive) to 5 (most), on the main screen. It rescales every movement
+threshold and the pose debounce together — a lower movement threshold lets noisier input through
+to the classifier, which is exactly when more frames of confirmation are worth paying for.
+
+It is one control rather than the six numbers it drives because the complaint behind it is always
+one of two things: *"it triggers when I didn't mean to"* (lower it) or *"I have to move miles
+before it notices"* (raise it). Level 3 is the default and reproduces the behaviour from before
+the setting existed. The running service re-reads it every frame, so dragging the slider retunes
+detection live.
+
+### Teach your own gestures
+
+The rule-based classifier encodes one opinion about what a fist looks like, tuned on one pair of
+hands. It cannot be right for everyone — finger length, how far someone actually curls, whether
+they can fully extend a finger at all — and for an accessibility tool that last one is the whole
+point.
+
+**Teach your gestures** (main screen) records five examples of a gesture as you actually make it,
+and from then on matches your hand instead of the rule. There is no training framework and no
+model file: landmarks are normalised to remove position, size and rotation, and compared against
+the average of your recordings. For a handful of examples per gesture that is both the simplest
+and the most accurate option — a network fitted to five samples would mostly be fitting noise.
+
+- **Recording needs gesture control switched on.** The detection service already owns the camera;
+  a second camera in the training screen would stop gesture control while you record the gestures
+  gesture control is meant to use.
+- **Your recordings never leave the phone**, and nothing about them is an image — they are 42
+  numbers per example describing joint positions relative to your wrist.
+- **A poor match falls back to the built-in rule** rather than guessing. If the closest recorded
+  gesture is still far away, or two match almost equally well, the frame goes to the rules: a
+  wrong Home press costs more than a missed one.
+
+The geometry is unit-tested in `tests/test_gesture_templates.py` against the Python reference
+(`app/gesture_templates.py`), including the property the whole feature rests on — the same
+gesture, moved, resized and tilted, normalises to the same numbers.
+
 ### Known limitations (by design, not bugs)
 
 - **"Screen off" needs a device-admin grant.** Android gives an ordinary app no API to turn the
@@ -289,6 +327,19 @@ class of app (Camera + Accessibility + Overlay + background-run permissions toge
 spyware to an automated scanner, even though this is exactly what a gesture-control app needs).
 To install anyway: **Play Store → profile icon → Play Protect → gear icon → turn off "Scan
 apps with Play Protect"**, install, then turn scanning back on.
+
+### Publishing to Play
+
+[docs/PLAY_LISTING.md](docs/PLAY_LISTING.md) holds everything Play asks for that is not the
+bundle itself: the Data safety answers and why "collects no data" is the honest one, the
+accessibility permissions declaration to paste, a demo-video script, and the pre-upload
+checklist. [docs/PRIVACY.md](docs/PRIVACY.md) is the privacy policy, ready to publish via GitHub
+Pages (Settings → Pages → main, `/docs`).
+
+The accessibility declaration is effectively the whole submission — everything else in the app's
+configuration exists to make it credible: `isAccessibilityTool="true"`, no window content, no
+event subscription at all, `<queries>` instead of `QUERY_ALL_PACKAGES`, and nothing leaving the
+device.
 
 ### Signing key
 

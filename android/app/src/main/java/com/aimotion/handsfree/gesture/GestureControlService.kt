@@ -59,6 +59,8 @@ private const val IDLE_AFTER_MS = 5_000L
 // frames: the higher frame rate buys enough headroom to demand more confirmation than before
 // while still cutting the wall-clock latency several times over, which is what stops a hand or
 // face passing through a pose mid-motion from misfiring something disruptive.
+// Baseline values for sensitivity level 3; SensitivityStore rescales all of them. See
+// applySensitivity.
 private const val STABLE_FRAMES_REQUIRED = 3
 private const val ACTION_COOLDOWN_MS = 350L
 
@@ -109,6 +111,8 @@ class GestureControlService : LifecycleService() {
     private lateinit var faceMappingStore: FaceMappingStore
     private lateinit var toggles: GestureToggleStore
     private lateinit var proximityMappingStore: ProximityMappingStore
+    private lateinit var sensitivity: SensitivityStore
+    private lateinit var templates: GestureTemplateStore
     private var proximityDetector: ProximityGestureDetector? = null
     private var handLandmarkerHelper: HandLandmarkerHelper? = null
     private var faceLandmarkerHelper: FaceLandmarkerHelper? = null
@@ -138,6 +142,12 @@ class GestureControlService : LifecycleService() {
     private var lastPinchFiredAtMs = 0L
 
     private val trackpadTracker = DirectionalMotionTracker(TRACKPAD_MOVE_THRESHOLD)
+
+    /** Derived from the sensitivity setting, alongside the trackers' thresholds. Volatile because
+     * they are rewritten on the analysis thread and read from the MediaPipe callback threads. */
+    @Volatile private var pinchThreshold = PINCH_DISTANCE_DELTA_THRESHOLD
+    @Volatile private var stableFramesRequired = STABLE_FRAMES_REQUIRED
+    private var appliedSensitivityLevel = -1
     private var lastTrackpadFiredAtMs = 0L
     private var trackpadTapped = false
     private var trackpadDropoutFrames = 0
@@ -163,6 +173,9 @@ class GestureControlService : LifecycleService() {
         faceMappingStore = FaceMappingStore(this)
         toggles = GestureToggleStore(this)
         proximityMappingStore = ProximityMappingStore(this)
+        sensitivity = SensitivityStore(this)
+        templates = GestureTemplateStore(this)
+        applySensitivity()
         startForeground(NOTIFICATION_ID, buildNotification())
         startProximityDetection()
         initDetectorsAsync()
@@ -315,7 +328,28 @@ class GestureControlService : LifecycleService() {
         }
     }
 
+    /**
+     * Rescales every movement threshold and the pose debounce to the user's sensitivity setting.
+     *
+     * Called once per frame rather than only when the setting screen writes it, because the
+     * service has no other notification that it changed and a setting that needs the service
+     * restarted to take effect reads as broken. The early return makes the steady-state cost a
+     * single volatile read and an int comparison.
+     */
+    private fun applySensitivity() {
+        val level = sensitivity.level
+        if (level == appliedSensitivityLevel) return
+        appliedSensitivityLevel = level
+
+        val scale = SensitivityStore.motionScaleFor(level)
+        trackpadTracker.moveThreshold = TRACKPAD_MOVE_THRESHOLD * scale
+        headTracker.moveThreshold = HEAD_MOVE_THRESHOLD * scale
+        pinchThreshold = PINCH_DISTANCE_DELTA_THRESHOLD * scale
+        stableFramesRequired = SensitivityStore.stableFramesFor(level)
+    }
+
     private fun analyzeFrame(imageProxy: ImageProxy) {
+        applySensitivity()
         val now = SystemClock.elapsedRealtime()
         // Slow down while nothing is in view; full rate resumes the instant something appears.
         val interval = if (now - lastSubjectSeenAtMs > IDLE_AFTER_MS) {
@@ -407,9 +441,7 @@ class GestureControlService : LifecycleService() {
         // you have formed a gesture the loop is already back at full rate.
         if (result.landmarks().isNotEmpty()) lastSubjectSeenAtMs = SystemClock.elapsedRealtime()
 
-        // topGesture() rather than toGestures(): the detector tracks a single hand and only the
-        // first result was ever read, so building a list and a Pair per frame was garbage.
-        val top = result.topGesture()
+        val top = classifyHand(result)
 
         when (top) {
             // A single extended index finger drives the continuous mini-trackpad below instead
@@ -432,6 +464,31 @@ class GestureControlService : LifecycleService() {
                 maybeResetTrackpad()
             }
         }
+    }
+
+    /**
+     * Turns this frame's hand into a gesture, and fills a training request if one is running.
+     *
+     * The user's own recorded shapes are tried first and the rule-based classifier is the
+     * fallback, not the other way round: where someone has demonstrated what *their* fist looks
+     * like, that beats a rule tuned on somebody else's hand. [GestureTemplateStore.classify]
+     * returns null whenever the match isn't clearly good, so a half-formed or unfamiliar pose
+     * still gets the rules rather than a guess.
+     *
+     * Recording happens here, before classification, because a gesture being taught is by
+     * definition one the current classifier gets wrong — waiting for it to be recognised first
+     * would make the feature useless for exactly the hands that need it.
+     */
+    private fun classifyHand(
+        result: com.google.mediapipe.tasks.vision.handlandmarker.HandLandmarkerResult,
+    ): Gesture {
+        val points = result.firstHandPoints() ?: return Gesture.UNKNOWN
+
+        TrainingSession.gestureToCapture()?.let { target ->
+            if (templates.record(target, points)) TrainingSession.onCaptured()
+        }
+
+        return templates.classify(points) ?: classifyGesture(points, result.firstHandedness())
     }
 
     /** A single extended index finger acts as an air mini-trackpad: move it to swipe (turn
@@ -616,7 +673,7 @@ class GestureControlService : LifecycleService() {
         if (previous == null) return
 
         val delta = distance - previous
-        if (kotlin.math.abs(delta) < PINCH_DISTANCE_DELTA_THRESHOLD) return
+        if (kotlin.math.abs(delta) < pinchThreshold) return
 
         val now = SystemClock.elapsedRealtime()
         if (now - lastPinchFiredAtMs < PINCH_COOLDOWN_MS) return
@@ -637,7 +694,7 @@ class GestureControlService : LifecycleService() {
             candidateGesture = gesture
             candidateStreak = 1
         }
-        if (candidateStreak < STABLE_FRAMES_REQUIRED) return
+        if (candidateStreak < stableFramesRequired) return
 
         val now = SystemClock.elapsedRealtime()
         if (now - lastFiredAtMs < ACTION_COOLDOWN_MS) return
@@ -678,7 +735,7 @@ class GestureControlService : LifecycleService() {
             candidateFaceGesture = gesture
             candidateFaceStreak = 1
         }
-        if (candidateFaceStreak < STABLE_FRAMES_REQUIRED) return
+        if (candidateFaceStreak < stableFramesRequired) return
 
         val now = SystemClock.elapsedRealtime()
         if (now - lastFaceFiredAtMs < ACTION_COOLDOWN_MS) return
