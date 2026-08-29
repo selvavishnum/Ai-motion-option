@@ -26,6 +26,7 @@ import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
@@ -35,6 +36,7 @@ import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.aimotion.handsfree.gesture.GestureTemplateStore
+import kotlinx.coroutines.delay
 
 /**
  * Teach the app your own hand shapes.
@@ -44,6 +46,8 @@ import com.aimotion.handsfree.gesture.GestureTemplateStore
  * use. What the user needs to know is whether the recording is progressing, which the counter
  * shows honestly: it only advances when a hand was actually seen and stored.
  */
+private const val SERVICE_POLL_INTERVAL_MS = 1_000L
+
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun GestureTrainingScreen(
@@ -52,9 +56,29 @@ fun GestureTrainingScreen(
 ) {
     val rows by viewModel.rows.collectAsState()
     val session by viewModel.session.collectAsState()
+    val serviceRunning by viewModel.serviceRunning.collectAsState()
 
     LaunchedEffect(session.justCompleted) {
         if (session.justCompleted != null) viewModel.acknowledgeCompletion()
+    }
+
+    // The user's most likely response to the "gesture control is off" card is to go and switch it
+    // on, then come back — so the screen has to notice that, and the service publishes a plain
+    // flag rather than a flow. Cancelled automatically when the screen leaves.
+    LaunchedEffect(Unit) {
+        while (true) {
+            viewModel.refreshServiceState()
+            delay(SERVICE_POLL_INTERVAL_MS)
+        }
+    }
+
+    // Leaving the screen ends any recording in progress. TrainingSession is process-wide, so
+    // without this the service would keep quietly capturing samples for a screen nobody is
+    // looking at, and the user would come back to a gesture trained on whatever their hand
+    // happened to be doing. (This also fires on rotation, which costs a re-tap of Teach — a fair
+    // trade against recording things the user cannot see.)
+    DisposableEffect(Unit) {
+        onDispose { viewModel.cancelRecording() }
     }
 
     Scaffold(
@@ -89,7 +113,7 @@ fun GestureTrainingScreen(
                 )
             }
 
-            if (!viewModel.serviceRunning) {
+            if (!serviceRunning) {
                 item {
                     Card(
                         colors = CardDefaults.cardColors(
@@ -122,7 +146,7 @@ fun GestureTrainingScreen(
             items(rows, key = { it.gesture.name }) { row ->
                 GestureRow(
                     row = row,
-                    enabled = viewModel.serviceRunning && !session.isRecording,
+                    enabled = serviceRunning && !session.isRecording,
                     onTeach = { viewModel.startRecording(row.gesture) },
                     onForget = { viewModel.forget(row.gesture) },
                 )

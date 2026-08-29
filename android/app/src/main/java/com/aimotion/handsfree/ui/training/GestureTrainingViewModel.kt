@@ -35,9 +35,24 @@ class GestureTrainingViewModel(application: Application) : AndroidViewModel(appl
 
     val session = TrainingSession.state
 
-    /** Recording is filled by the detection service, so without it running the screen can do
-     * nothing but say so. */
-    val serviceRunning: Boolean get() = GestureControlService.isRunning
+    /**
+     * Whether the detection service is running, as observable state rather than a plain getter.
+     *
+     * Recording is filled by that service, so this gates the whole screen — and it can change
+     * while the screen is open, most obviously when the user takes the hint and switches gesture
+     * control on from the Quick Settings tile. A getter read during composition would never
+     * recompose, leaving the "turn it on and come back" card up and every button disabled after
+     * the user had done exactly what it asked.
+     */
+    private val _serviceRunning = MutableStateFlow(GestureControlService.isRunning)
+    val serviceRunning: StateFlow<Boolean> = _serviceRunning.asStateFlow()
+
+    /** The service exposes a plain flag, not a flow, so the screen polls it. A settings screen
+     * checking one volatile boolean once a second costs nothing, and it is the whole of the
+     * machinery this needs. */
+    fun refreshServiceState() {
+        _serviceRunning.value = GestureControlService.isRunning
+    }
 
     private fun readRows(): List<TrainedGesture> = MAPPABLE_GESTURES.map { gesture ->
         TrainedGesture(
