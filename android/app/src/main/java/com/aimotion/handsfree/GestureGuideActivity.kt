@@ -69,8 +69,16 @@ class GestureGuideActivity : AppCompatActivity() {
             } + listOf(
                 GuideEntry(
                     emoji = "☝️",
-                    title = "Point → Air trackpad",
-                    howTo = "Extend only your index finger. Move it to turn/scroll, hold it still to tap/select.",
+                    title = "Point → Move the cursor",
+                    howTo = "Extend only your index finger and the dot follows it. Hold still for a " +
+                        "moment and the dot turns orange: the pen is down, and everything you " +
+                        "trace from then on is drawn or dragged — a scroll, a swipe, a circle. " +
+                        "Hold still again to lift it.",
+                ),
+                GuideEntry(
+                    emoji = "✌️",
+                    title = "Peace → Select",
+                    howTo = "Hold up two fingers to tap wherever the dot is sitting.",
                 ),
                 GuideEntry(
                     emoji = "🤏",

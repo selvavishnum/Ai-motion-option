@@ -100,8 +100,13 @@ class GestureTemplateStore(context: Context) {
         prefs.edit().putString(KEY, json.toString()).apply()
     }
 
-    /** How many usable examples exist for a gesture. Drives the training screen's progress. */
+    /** How many usable examples exist for a gesture. */
     fun sampleCount(gesture: Gesture): Int = templates().samples[gesture]?.size ?: 0
+
+    /** The averaged shape for a gesture, or null if it has too few examples to have one yet.
+     * Exposed so [AdaptiveGestureLearner] can measure a candidate against it before averaging it
+     * in — the guard that keeps a misclassification from becoming the definition. */
+    fun centroidOf(gesture: Gesture): FloatArray? = templates().centroids[gesture]
 
     /** Gestures with enough examples to be matched against. */
     fun trainedGestures(): Set<Gesture> = templates().centroids.keys

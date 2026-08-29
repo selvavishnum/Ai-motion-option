@@ -29,14 +29,24 @@ data class GestureAction(val type: ActionType, val packageName: String? = null) 
     }
 }
 
-/** Default preset. [Gesture.POINT] is deliberately absent: holding up a single index finger
- * now drives a continuous mini-trackpad (turn = swipe left/right, scroll = swipe up/down, hold
- * still = tap/select) rather than firing one fixed action, so it never appears in the
- * remappable table — see GestureControlService's finger-trackpad tracking. */
+/**
+ * Default preset.
+ *
+ * Two gestures are deliberately absent, because between them they *are* the pointer and giving
+ * either one a second job would make the pointer unusable:
+ *
+ * - [Gesture.POINT] — a single index finger moves the cursor and, held still, puts the pen down
+ *   to drag or draw. See AirPointer.
+ * - [Gesture.PEACE] — the click. A pointer with no button can only ever select by dwelling,
+ *   which forces every deliberate pause to become a tap; a separate pose for "select" is what
+ *   lets the cursor be parked somewhere without something happening.
+ *
+ * Neither appears in the remappable table, so neither can be reassigned out from under the
+ * pointer.
+ */
 val DEFAULT_MAPPING: Map<Gesture, GestureAction> = mapOf(
     Gesture.OPEN_PALM to GestureAction(ActionType.WAKE_SCREEN),
     Gesture.FIST to GestureAction(ActionType.HOME),
-    Gesture.PEACE to GestureAction(ActionType.SWIPE_RIGHT),
     Gesture.THUMBS_UP to GestureAction(ActionType.SWIPE_UP),
     Gesture.THUMBS_DOWN to GestureAction(ActionType.SWIPE_DOWN),
 )

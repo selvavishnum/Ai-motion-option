@@ -11,6 +11,7 @@ import android.graphics.Bitmap
 import android.graphics.Matrix
 import android.os.Build
 import android.os.SystemClock
+import android.provider.Settings
 import android.util.Log
 import androidx.camera.core.CameraSelector
 import androidx.camera.core.ImageAnalysis
@@ -82,20 +83,6 @@ private const val TRACKPAD_HOLD_FRAMES_FOR_TAP = 4
  * movement. */
 private const val TRACKPAD_DROPOUT_GRACE_FRAMES = 3
 
-// Air pointer. Your hand only travels comfortably across the middle of the camera's view, so
-// that band is stretched to cover the whole screen — mapping the full frame would mean reaching
-// far to one side just to touch the edge of the display, and never quite getting to the corners.
-private const val POINTER_ACTIVE_LO = 0.2f
-private const val POINTER_ACTIVE_HI = 0.8f
-
-/** Low-pass factor for the pointer. Landmarks jitter by a few pixels every frame; unsmoothed the
- * dot visibly buzzes even with a perfectly still hand. */
-private const val POINTER_SMOOTHING = 0.35f
-
-/** How far the fingertip may drift, as a fraction of the screen, and still count as held still
- * for a tap. */
-private const val POINTER_TAP_TOLERANCE_PX = 28f
-
 // Head movement, as a fraction of the distance between the eyes — so the same real head movement
 // works at any distance from the phone. Roughly a third of an eye-span of travel.
 private const val HEAD_MOVE_THRESHOLD = 0.35f
@@ -113,6 +100,7 @@ class GestureControlService : LifecycleService() {
     private lateinit var proximityMappingStore: ProximityMappingStore
     private lateinit var sensitivity: SensitivityStore
     private lateinit var templates: GestureTemplateStore
+    private lateinit var learner: AdaptiveGestureLearner
     private var proximityDetector: ProximityGestureDetector? = null
     private var handLandmarkerHelper: HandLandmarkerHelper? = null
     private var faceLandmarkerHelper: FaceLandmarkerHelper? = null
@@ -147,6 +135,8 @@ class GestureControlService : LifecycleService() {
      * they are rewritten on the analysis thread and read from the MediaPipe callback threads. */
     @Volatile private var pinchThreshold = PINCH_DISTANCE_DELTA_THRESHOLD
     @Volatile private var stableFramesRequired = STABLE_FRAMES_REQUIRED
+    @Volatile private var pointerDwellMs = DEFAULT_DWELL_MS
+    @Volatile private var pointerMinCutoff = DEFAULT_MIN_CUTOFF
     private var appliedSensitivityLevel = -1
     private var lastTrackpadFiredAtMs = 0L
     private var trackpadTapped = false
@@ -156,14 +146,14 @@ class GestureControlService : LifecycleService() {
     private var lastHeadFiredAtMs = 0L
 
     private var pointerOverlay: PointerOverlay? = null
-    private var pointerX = -1f
-    private var pointerY = -1f
-    private var pointerAnchorX = 0f
-    private var pointerAnchorY = 0f
-    private var pointerStillFrames = 0
-    private var pointerTapped = false
+
+    /** Created lazily, because it needs the display size and the service outlives any one
+     * configuration. Confined to the MediaPipe callback thread. */
+    private var airPointer: AirPointer? = null
+    private var pointerVisible = false
 
     private var lastFaceFiredAtMs = 0L
+    private var peaceStreak = 0
     private var candidateFaceGesture: FaceGesture? = null
     private var candidateFaceStreak = 0
 
@@ -175,6 +165,7 @@ class GestureControlService : LifecycleService() {
         proximityMappingStore = ProximityMappingStore(this)
         sensitivity = SensitivityStore(this)
         templates = GestureTemplateStore(this)
+        learner = AdaptiveGestureLearner(templates)
         applySensitivity()
         startForeground(NOTIFICATION_ID, buildNotification())
         startProximityDetection()
@@ -346,6 +337,14 @@ class GestureControlService : LifecycleService() {
         headTracker.moveThreshold = HEAD_MOVE_THRESHOLD * scale
         pinchThreshold = PINCH_DISTANCE_DELTA_THRESHOLD * scale
         stableFramesRequired = SensitivityStore.stableFramesFor(level)
+        pointerDwellMs = SensitivityStore.dwellMsFor(level)
+        pointerMinCutoff = SensitivityStore.pointerMinCutoffFor(level)
+        airPointer?.let { applyPointerSensitivity(it) }
+    }
+
+    private fun applyPointerSensitivity(pointer: AirPointer) {
+        pointer.dwellMs = pointerDwellMs
+        pointer.configureFilter(pointerMinCutoff, DEFAULT_BETA)
     }
 
     private fun analyzeFrame(imageProxy: ImageProxy) {
@@ -449,46 +448,65 @@ class GestureControlService : LifecycleService() {
             Gesture.POINT -> {
                 candidateGesture = Gesture.UNKNOWN
                 candidateStreak = 0
+                peaceStreak = 0
                 lastPinchDistance = null
                 trackpadDropoutFrames = 0
                 handleFingerTrackpad(result)
             }
+            // The click. Kept out of the mapping table for the same reason as POINT: it is part
+            // of the pointer, not a spare gesture. It still runs through the discrete debounce,
+            // because a stray frame that taps is far more disruptive than one that scrolls.
+            Gesture.PEACE -> {
+                candidateGesture = Gesture.UNKNOWN
+                candidateStreak = 0
+                lastPinchDistance = null
+                handlePeaceClick()
+                // Not a dropout: the hand is still there, still driving the pointer, and
+                // discarding the cursor because the user clicked would move it out from under
+                // the very thing they were selecting.
+                trackpadDropoutFrames = 0
+            }
             Gesture.UNKNOWN -> {
                 handleDetectedGesture(Gesture.UNKNOWN)
                 handlePinchTracking(result)
+                peaceStreak = 0
                 maybeResetTrackpad()
             }
             else -> {
                 handleDetectedGesture(top)
                 lastPinchDistance = null
+                peaceStreak = 0
                 maybeResetTrackpad()
             }
         }
     }
 
     /**
-     * Turns this frame's hand into a gesture, and fills a training request if one is running.
+     * Turns this frame's hand into a gesture, and quietly learns from it.
      *
      * The user's own recorded shapes are tried first and the rule-based classifier is the
-     * fallback, not the other way round: where someone has demonstrated what *their* fist looks
-     * like, that beats a rule tuned on somebody else's hand. [GestureTemplateStore.classify]
-     * returns null whenever the match isn't clearly good, so a half-formed or unfamiliar pose
-     * still gets the rules rather than a guess.
+     * fallback, not the other way round: where the app has seen what *their* fist looks like,
+     * that beats a rule tuned on somebody else's hand. [GestureTemplateStore.classify] returns
+     * null whenever the match isn't clearly good, so a half-formed or unfamiliar pose still gets
+     * the rules rather than a guess.
      *
-     * Recording happens here, before classification, because a gesture being taught is by
-     * definition one the current classifier gets wrong — waiting for it to be recognised first
-     * would make the feature useless for exactly the hands that need it.
+     * The learner is fed the **rule** verdict, not the returned one. Learning from the
+     * personalised match would be learning from its own output: every sample would confirm
+     * whatever the templates already believed, and a shape that had drifted would keep drifting
+     * with nothing outside itself to contradict it.
      */
     private fun classifyHand(
         result: com.google.mediapipe.tasks.vision.handlandmarker.HandLandmarkerResult,
     ): Gesture {
-        val points = result.firstHandPoints() ?: return Gesture.UNKNOWN
-
-        TrainingSession.gestureToCapture()?.let { target ->
-            if (templates.record(target, points)) TrainingSession.onCaptured()
+        val points = result.firstHandPoints()
+        if (points == null) {
+            learner.reset()
+            return Gesture.UNKNOWN
         }
 
-        return templates.classify(points) ?: classifyGesture(points, result.firstHandedness())
+        val byRules = classifyGesture(points, result.firstHandedness())
+        learner.observe(byRules, points, stableFramesRequired)
+        return templates.classify(points) ?: byRules
     }
 
     /** A single extended index finger acts as an air mini-trackpad: move it to swipe (turn
@@ -508,7 +526,12 @@ class GestureControlService : LifecycleService() {
         // Pointer mode replaces swipe mode rather than running alongside it. Both at once would
         // mean the dot tracking your finger while the page scrolls under it, which reads as the
         // pointer causing the scroll.
-        if (toggles.pointerEnabled) {
+        //
+        // The overlay permission is part of the condition, not a detail of drawing: without it
+        // the dot cannot be shown, and a cursor nobody can see — dwelling, pressing a pen down,
+        // dragging whatever is underneath — is worse than no cursor at all. Falling back to
+        // swipe mode keeps the finger useful instead.
+        if (toggles.pointerEnabled && Settings.canDrawOverlays(this)) {
             handleAirPointer(tip.x(), tip.y())
             return
         }
@@ -598,61 +621,69 @@ class GestureControlService : LifecycleService() {
     }
 
     /**
-     * Moves the on-screen dot to follow the fingertip, and taps where it sits when the finger
-     * holds still.
+     * Drives the cursor from the fingertip, and dispatches whatever the pen does.
      *
-     * Tapping at the pointer rather than the screen centre is the substantive part: the dot makes
-     * the target visible, so tapping anywhere else would contradict what the user can see.
+     * The pointer owns the geometry, the smoothing and the dwell (see [AirPointer]); this only
+     * has to draw the dot and turn pen events into touches. Keeping it that thin is what let the
+     * state machine be tested against a Python reference rather than only on a phone.
      */
     private fun handleAirPointer(rawX: Float, rawY: Float) {
         val metrics = resources.displayMetrics
-        val targetX = mapToScreen(rawX, metrics.widthPixels)
-        val targetY = mapToScreen(rawY, metrics.heightPixels)
+        val pointer = airPointer?.also { it.resize(metrics.widthPixels, metrics.heightPixels) }
+            ?: AirPointer(metrics.widthPixels, metrics.heightPixels)
+                .also { airPointer = it; applyPointerSensitivity(it) }
 
-        if (pointerX < 0f) {
-            pointerX = targetX
-            pointerY = targetY
-            pointerAnchorX = targetX
-            pointerAnchorY = targetY
-            pointerStillFrames = 0
-            pointerTapped = false
-        } else {
-            pointerX += POINTER_SMOOTHING * (targetX - pointerX)
-            pointerY += POINTER_SMOOTHING * (targetY - pointerY)
-        }
+        val update = pointer.update(rawX, rawY, SystemClock.elapsedRealtime())
+        pointerVisible = true
 
         val overlay = pointerOverlay ?: PointerOverlay(this).also { pointerOverlay = it }
-        overlay.moveTo(pointerX.toInt(), pointerY.toInt())
+        overlay.moveTo(update.x.toInt(), update.y.toInt(), update.penDown)
 
-        val drift = kotlin.math.hypot(pointerX - pointerAnchorX, pointerY - pointerAnchorY)
-        if (drift > POINTER_TAP_TOLERANCE_PX) {
-            pointerAnchorX = pointerX
-            pointerAnchorY = pointerY
-            pointerStillFrames = 0
-            pointerTapped = false
-            return
-        }
-
-        pointerStillFrames++
-        if (!pointerTapped && pointerStillFrames >= TRACKPAD_HOLD_FRAMES_FOR_TAP) {
-            pointerTapped = true
-            ActionDispatcher.tapAt(pointerX, pointerY)
+        when (update.event) {
+            PointerEvent.PEN_DOWN -> ActionDispatcher.startDrag(update.x, update.y)
+            PointerEvent.PEN_MOVE -> ActionDispatcher.continueDrag(update.x, update.y)
+            PointerEvent.PEN_UP -> ActionDispatcher.endDrag(update.x, update.y)
+            PointerEvent.NONE -> Unit
         }
     }
 
-    /** Stretches the comfortable middle band of the camera view across the full screen axis. */
-    private fun mapToScreen(normalized: Float, sizePx: Int): Float {
-        val t = ((normalized - POINTER_ACTIVE_LO) / (POINTER_ACTIVE_HI - POINTER_ACTIVE_LO))
-            .coerceIn(0f, 1f)
-        return t * sizePx
+    /**
+     * Taps where the cursor is, or the middle of the screen when there is no cursor.
+     *
+     * A click that landed anywhere other than the visible dot would contradict the only thing on
+     * screen telling the user where they are aiming, so the dot's position wins whenever there is
+     * one.
+     */
+    private fun handlePeaceClick() {
+        val now = SystemClock.elapsedRealtime()
+        if (now - lastFiredAtMs < ACTION_COOLDOWN_MS) return
+
+        peaceStreak++
+        if (peaceStreak < stableFramesRequired) return
+        peaceStreak = 0
+        lastFiredAtMs = now
+
+        val pointer = airPointer
+        if (pointerVisible && pointer != null) {
+            // Selecting ends any drag first: leaving one open would mean tapping with a finger
+            // already pressed somewhere else, which no app can make sense of.
+            pointer.liftPen()?.let { ActionDispatcher.endDrag(it.x, it.y) }
+            ActionDispatcher.tapAt(pointer.x, pointer.y)
+        } else {
+            ActionDispatcher.fire(GestureAction(ActionType.TAP))
+        }
     }
 
     private fun hidePointer() {
-        if (pointerX < 0f && pointerOverlay?.isShowing != true) return
-        pointerX = -1f
-        pointerY = -1f
-        pointerStillFrames = 0
-        pointerTapped = false
+        val pointer = airPointer
+        if (pointer != null) {
+            // Ends an open drag rather than abandoning it. A hand that leaves the frame mid-stroke
+            // would otherwise leave the touch pressed on whatever is underneath.
+            pointer.release()?.let { ActionDispatcher.endDrag(it.x, it.y) }
+        }
+        if (!pointerVisible && pointerOverlay?.isShowing != true) return
+        pointerVisible = false
+        peaceStreak = 0
         pointerOverlay?.hide()
     }
 

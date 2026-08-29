@@ -164,6 +164,20 @@ class AirPointer:
             x, y, self._pen_down, PointerEvent.PEN_DOWN if self._pen_down else PointerEvent.PEN_UP
         )
 
+    def lift_pen(self) -> PointerUpdate | None:
+        """Ends a drag but keeps the cursor exactly where it is.
+
+        Distinct from [release], and the distinction matters: release forgets the smoothing
+        history so a hand that has left and come back does not slide in from where the last one
+        stopped. Doing that after every click would restart the filter mid-session, and the
+        cursor would visibly jump the moment the user selected something -- while looking at the
+        thing they had just carefully aimed at.
+        """
+        if not self._pen_down:
+            return None
+        self._pen_down = False
+        return PointerUpdate(self._x, self._y, False, PointerEvent.PEN_UP)
+
     def release(self) -> PointerUpdate | None:
         """Call when the finger is no longer visible.
 

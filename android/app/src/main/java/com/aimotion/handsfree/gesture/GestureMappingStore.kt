@@ -8,7 +8,9 @@ import org.json.JSONObject
  * classification fallback, not a real trigger; [Gesture.POINT] drives the continuous
  * finger-trackpad instead of a single fixed action (see GestureControlService), so neither has
  * an entry in [DEFAULT_MAPPING] and both are excluded here. */
-val MAPPABLE_GESTURES: List<Gesture> = Gesture.entries.filter { it != Gesture.UNKNOWN && it != Gesture.POINT }
+val MAPPABLE_GESTURES: List<Gesture> = Gesture.entries.filter {
+    it != Gesture.UNKNOWN && it != Gesture.POINT && it != Gesture.PEACE
+}
 
 /** Persists the user's gesture → action mapping as a small JSON blob in SharedPreferences. */
 class GestureMappingStore(context: Context) {

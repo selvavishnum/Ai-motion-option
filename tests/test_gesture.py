@@ -106,3 +106,28 @@ def test_wrong_landmark_count_raises() -> None:
 
     with pytest.raises(ValueError):
         extended_fingers([Point(0, 0)], Handedness.RIGHT)
+
+
+def test_a_barely_uncurled_middle_finger_still_reads_as_a_point() -> None:
+    """The pointing hand's failure mode, and the reason PEACE_MIDDLE_MARGIN exists.
+
+    Nobody points with the middle finger fully folded; it sits a little proud of the knuckle and
+    wanders either side of the extended/curled line frame to frame. Without a margin the hand
+    alternates between POINT and PEACE, which is felt as the cursor stalling and something being
+    selected while you were only moving it.
+    """
+    lm = _base_landmarks()
+    _extend(lm, 8, 6)
+    for tip, pip in ((16, 14), (20, 18)):
+        _curl(lm, tip, pip)
+    lm[3] = Point(x=0.6, y=0.5)
+    lm[4] = Point(x=0.55, y=0.5)
+
+    # Middle knuckle 0.30 from the wrist, tip 0.32: past the line, nowhere near a peace sign.
+    lm[10] = Point(x=0.5, y=0.6)
+    lm[12] = Point(x=0.5, y=0.58)
+    assert classify_gesture(lm, Handedness.RIGHT) == Gesture.POINT
+
+    # A real peace sign clears the margin several times over and is unaffected.
+    _extend(lm, 12, 10)
+    assert classify_gesture(lm, Handedness.RIGHT) == Gesture.PEACE

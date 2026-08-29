@@ -23,6 +23,19 @@ private const val PINCH_SPAN_FRACTION = 0.12f // how far each finger travels, as
  * Android has no API for one app to control another beyond simulated input via this service. */
 class GestureAccessibilityService : AccessibilityService() {
 
+    /** One touch held down and dragged along whatever path the pointer traces. See
+     * [ContinuousDrag] for why a chain of continued strokes is the only way to draw a curve. */
+    private val drag = ContinuousDrag { gesture, onCompleted, onCancelled ->
+        dispatchGesture(
+            gesture,
+            object : GestureResultCallback() {
+                override fun onCompleted(description: GestureDescription?) = onCompleted.run()
+                override fun onCancelled(description: GestureDescription?) = onCancelled.run()
+            },
+            null,
+        )
+    }
+
     override fun onServiceConnected() {
         super.onServiceConnected()
         ActionDispatcher.attach(this)
@@ -30,8 +43,30 @@ class GestureAccessibilityService : AccessibilityService() {
     }
 
     override fun onUnbind(intent: Intent?): Boolean {
+        // Abandoned rather than ended: with the service going away there is nothing left to
+        // dispatch the closing segment through, and the system tears the injected touch down with
+        // the connection.
+        drag.cancel()
         ActionDispatcher.detach(this)
         return super.onUnbind(intent)
+    }
+
+    /** Presses a finger down at a point and holds it there. */
+    fun startDrag(x: Float, y: Float) {
+        val (width, height) = screenSize()
+        drag.start(x.coerceIn(0f, width - 1f), y.coerceIn(0f, height - 1f))
+    }
+
+    /** Drags the held finger to a point, extending the same unbroken touch. */
+    fun continueDrag(x: Float, y: Float) {
+        val (width, height) = screenSize()
+        drag.moveTo(x.coerceIn(0f, width - 1f), y.coerceIn(0f, height - 1f))
+    }
+
+    /** Lifts the held finger. */
+    fun endDrag(x: Float, y: Float) {
+        val (width, height) = screenSize()
+        drag.end(x.coerceIn(0f, width - 1f), y.coerceIn(0f, height - 1f))
     }
 
     override fun onAccessibilityEvent(event: AccessibilityEvent?) {

@@ -167,3 +167,27 @@ def test_a_shorter_dwell_toggles_sooner() -> None:
         raise AssertionError("pen never went down")
 
     assert frames_until_pen_down(200.0) < frames_until_pen_down(900.0)
+
+
+def test_lift_pen_ends_the_drag_without_moving_the_cursor() -> None:
+    """A click must not restart the smoothing. Releasing after every selection would make the
+    cursor jump exactly when the user is looking at what they just aimed at."""
+    p = _pointer(dwell_ms=200.0)
+    _hold(p, 0.5, 0.5, frames=20)
+    assert p.pen_down
+    before = p.position
+
+    update = p.lift_pen()
+    assert update is not None
+    assert update.event is PointerEvent.PEN_UP
+    assert not p.pen_down
+    assert p.position == before
+
+    # The next frame continues from where it was, rather than snapping to the raw fingertip.
+    assert p.update(0.5, 0.5, 3000.0).x == pytest.approx(before[0], abs=1.0)
+
+
+def test_lift_pen_with_the_pen_up_reports_nothing() -> None:
+    p = _pointer()
+    p.update(0.5, 0.5, 0.0)
+    assert p.lift_pen() is None
