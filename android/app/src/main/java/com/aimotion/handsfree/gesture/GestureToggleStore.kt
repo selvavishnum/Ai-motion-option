@@ -22,7 +22,7 @@ class GestureToggleStore(context: Context) {
     @Volatile private var bubbleCache = prefs.getBoolean(KEY_BUBBLE, true)
     @Volatile private var pauseScreenOffCache = prefs.getBoolean(KEY_PAUSE_SCREEN_OFF, true)
     @Volatile private var waveCache = prefs.getBoolean(KEY_WAVE, true)
-    @Volatile private var pointerCache = prefs.getBoolean(KEY_POINTER, false)
+    @Volatile private var pointerCache = prefs.getBoolean(KEY_POINTER, true)
 
     // Held in a field on purpose: SharedPreferences keeps listeners weakly, so one with no strong
     // reference is collected and silently stops firing.
@@ -33,7 +33,7 @@ class GestureToggleStore(context: Context) {
             KEY_BUBBLE -> bubbleCache = p.getBoolean(KEY_BUBBLE, true)
             KEY_PAUSE_SCREEN_OFF -> pauseScreenOffCache = p.getBoolean(KEY_PAUSE_SCREEN_OFF, true)
             KEY_WAVE -> waveCache = p.getBoolean(KEY_WAVE, true)
-            KEY_POINTER -> pointerCache = p.getBoolean(KEY_POINTER, false)
+            KEY_POINTER -> pointerCache = p.getBoolean(KEY_POINTER, true)
             // key is null when preferences are cleared wholesale; re-read everything.
             null -> {
                 handCache = p.getBoolean(KEY_HAND, true)
@@ -41,7 +41,7 @@ class GestureToggleStore(context: Context) {
                 bubbleCache = p.getBoolean(KEY_BUBBLE, true)
                 pauseScreenOffCache = p.getBoolean(KEY_PAUSE_SCREEN_OFF, true)
                 waveCache = p.getBoolean(KEY_WAVE, true)
-                pointerCache = p.getBoolean(KEY_POINTER, false)
+                pointerCache = p.getBoolean(KEY_POINTER, true)
             }
         }
     }
@@ -105,10 +105,18 @@ class GestureToggleStore(context: Context) {
         }
 
     /**
-     * Air pointer: a dot on screen follows the pointed finger, and holding still taps where it
-     * sits. Off by default because it *replaces* the finger-swipe behaviour rather than adding to
-     * it — showing a pointer while the page scrolls under it reads as the pointer causing the
-     * scroll. Needs the overlay permission to draw anything.
+     * Air pointer: a dot on screen follows the pointed finger, and holding it still puts a pen
+     * down so the next movement drags — a scroll, a swipe, or a line of whatever shape the finger
+     * traces.
+     *
+     * On by default, which it was not when the alternative was four fixed-length swipes. The
+     * pointer is now a superset of that: scrolling and turning are drags, of the length the user
+     * actually made, and curves exist at all. It still *replaces* the swipe mode rather than
+     * running alongside it, because a dot tracking your finger while the page scrolls under it
+     * reads as the pointer causing the scroll.
+     *
+     * Requires the overlay permission. Without it the swipe mode is used instead — see
+     * GestureControlService: a cursor nobody can see, dragging things, is worse than no cursor.
      */
     var pointerEnabled: Boolean
         get() = pointerCache

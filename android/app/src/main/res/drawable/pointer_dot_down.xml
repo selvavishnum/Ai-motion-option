@@ -1,0 +1,33 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- The air pointer with the pen down: the same dot, filled solid and ringed in orange.
+
+     The state has to be visible on the dot itself, because it is the only thing on screen that
+     knows about it. A pen the user cannot see is down is a pen that draws a line across whatever
+     they were only meaning to look at — and the dwell that puts it down is a pause, which is
+     easy to make by accident. Orange rather than a second blue: it must read as different at a
+     glance and over a blue app bar. -->
+<layer-list xmlns:android="http://schemas.android.com/apk/res/android">
+    <item>
+        <shape android:shape="oval">
+            <solid android:color="#66000000" />
+        </shape>
+    </item>
+    <item
+        android:top="2dp"
+        android:bottom="2dp"
+        android:left="2dp"
+        android:right="2dp">
+        <shape android:shape="oval">
+            <solid android:color="#FFFFFFFF" />
+        </shape>
+    </item>
+    <item
+        android:top="4dp"
+        android:bottom="4dp"
+        android:left="4dp"
+        android:right="4dp">
+        <shape android:shape="oval">
+            <solid android:color="#F97316" />
+        </shape>
+    </item>
+</layer-list>

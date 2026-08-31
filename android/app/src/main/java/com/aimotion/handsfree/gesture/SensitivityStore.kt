@@ -80,6 +80,39 @@ class SensitivityStore(context: Context) {
             else -> 2
         }
 
+        /**
+         * How long the fingertip must hold still to put the pen down or lift it.
+         *
+         * This is the one place the dial changes *what it feels like to draw* rather than how
+         * readily something fires, so the range is deliberately narrower than the movement
+         * scale. Below about half a second a pause to think becomes a click; above about a
+         * second the pen feels stuck.
+         */
+        fun dwellMsFor(level: Int): Long = when (level.coerceIn(MIN_LEVEL, MAX_LEVEL)) {
+            1 -> 1_000L
+            2 -> 850L
+            3 -> 700L
+            4 -> 580L
+            else -> 480L
+        }
+
+        /**
+         * Cutoff, in Hz, of the pointer's smoothing at zero speed — how quiet the dot is when the
+         * hand is still. Lower is steadier and laggier.
+         *
+         * It moves *with* the movement thresholds rather than against them: someone who asks for
+         * less sensitivity is telling you their hand is not steady, and a steadier cursor is
+         * most of what they want. The speed term (see OneEuroFilter) keeps a deliberate sweep
+         * responsive at every setting, so this only ever costs lag at the slow end.
+         */
+        fun pointerMinCutoffFor(level: Int): Float = when (level.coerceIn(MIN_LEVEL, MAX_LEVEL)) {
+            1 -> 0.40f
+            2 -> 0.55f
+            3 -> 0.70f
+            4 -> 0.95f
+            else -> 1.30f
+        }
+
         fun labelFor(level: Int): String = when (level.coerceIn(MIN_LEVEL, MAX_LEVEL)) {
             1 -> "Least sensitive — big, deliberate movements only"
             2 -> "Less sensitive — fewer accidental triggers"

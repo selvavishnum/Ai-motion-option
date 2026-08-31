@@ -8,6 +8,7 @@ normalized (x, y, z) image coordinates where x/y are in [0, 1] and y increases d
 
 from __future__ import annotations
 
+import math
 from dataclasses import dataclass
 from enum import Enum
 
@@ -54,6 +55,33 @@ NUM_LANDMARKS = 21
 
 def _distance_sq(a: Point, b: Point) -> float:
     return (a.x - b.x) ** 2 + (a.y - b.y) ** 2
+
+
+# How much further than its own middle joint the middle finger must reach before a hand counts
+# as a peace sign rather than a point.
+#
+# Without a margin the two poses share a boundary at exactly ratio 1.0, and a pointing hand does
+# not hold its middle finger fully curled -- it sits a little proud of the knuckle, wandering
+# either side of that line frame to frame. The classification then alternates between POINT and
+# PEACE, which is felt as the cursor stalling and something being selected while you were only
+# moving. A real peace sign clears this several times over.
+PEACE_MIDDLE_MARGIN = 0.15
+
+
+def _finger_extension(landmarks: list[Point], tip: int, pip: int) -> float:
+    """How far the tip reaches from the wrist, relative to its own middle joint.
+
+    Above 1.0 the finger is extended, below it the tip has folded back toward the palm. Returned
+    as a ratio rather than a flag so a caller that needs to be sure -- rather than merely on the
+    right side of the line -- can ask for a margin.
+    """
+    wrist = landmarks[WRIST]
+    pip_distance_sq = _distance_sq(landmarks[pip], wrist)
+    if pip_distance_sq <= 0.0:
+        # Degenerate: the joint is on top of the wrist, so there is no direction to be extended
+        # in. Report "not extended" rather than dividing by zero.
+        return 0.0
+    return math.sqrt(_distance_sq(landmarks[tip], wrist) / pip_distance_sq)
 
 
 def _finger_extended(landmarks: list[Point], tip: int, pip: int) -> bool:
@@ -104,7 +132,11 @@ def classify_gesture(landmarks: list[Point], handedness: Handedness) -> Gesture:
         tip_y = landmarks[THUMB_TIP].y
         return Gesture.THUMBS_UP if tip_y < wrist_y else Gesture.THUMBS_DOWN
     if index and middle and not ring and not pinky:
-        return Gesture.PEACE
+        # A margin, not just the flag: see PEACE_MIDDLE_MARGIN. A middle finger that is only
+        # barely past its knuckle belongs to a pointing hand, and calling it a peace sign is how
+        # the pointer ends up clicking when the user meant to move.
+        middle_clear = _finger_extension(landmarks, 12, 10) > 1.0 + PEACE_MIDDLE_MARGIN
+        return Gesture.PEACE if middle_clear else Gesture.POINT
     if index and not middle and not ring and not pinky:
         return Gesture.POINT
     return Gesture.UNKNOWN

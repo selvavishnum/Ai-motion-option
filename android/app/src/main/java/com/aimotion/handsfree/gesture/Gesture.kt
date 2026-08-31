@@ -53,6 +53,35 @@ private fun fingerExtended(landmarks: List<Point>, tip: Int, pip: Int): Boolean 
     return distanceSquared(landmarks[tip], wrist) > distanceSquared(landmarks[pip], wrist)
 }
 
+/**
+ * How much further than its own middle joint the middle finger must reach before a hand counts
+ * as a peace sign rather than a point.
+ *
+ * Without a margin the two poses share a boundary at exactly ratio 1.0, and a pointing hand does
+ * not hold its middle finger fully curled — it sits a little proud of the knuckle, wandering
+ * either side of that line frame to frame. The classification then alternates between POINT and
+ * PEACE, which is felt as the cursor stalling and something being selected while you were only
+ * moving it. A real peace sign clears this several times over.
+ */
+private const val PEACE_MIDDLE_MARGIN = 0.15f
+
+/**
+ * How far the tip reaches from the wrist, relative to its own middle joint.
+ *
+ * Above 1.0 the finger is extended, below it the tip has folded back toward the palm. A ratio
+ * rather than a flag, so a caller that needs to be *sure* — rather than merely on the right side
+ * of the line — can ask for a margin. Compared as squares, so no square root is taken on the
+ * per-frame path.
+ */
+private fun fingerReachesBeyond(landmarks: List<Point>, tip: Int, pip: Int, margin: Float): Boolean {
+    val wrist = landmarks[WRIST]
+    val pipDistanceSquared = distanceSquared(landmarks[pip], wrist)
+    // Degenerate: the joint is on top of the wrist, so there is no direction to be extended in.
+    if (pipDistanceSquared <= 0f) return false
+    val threshold = (1f + margin) * (1f + margin)
+    return distanceSquared(landmarks[tip], wrist) > pipDistanceSquared * threshold
+}
+
 private fun thumbExtended(landmarks: List<Point>, handedness: Handedness): Boolean {
     val tipX = landmarks[THUMB_TIP].x
     val ipX = landmarks[THUMB_IP].x
@@ -89,7 +118,15 @@ fun classifyGesture(landmarks: List<Point>, handedness: Handedness): Gesture {
             val tipY = landmarks[THUMB_TIP].y
             if (tipY < wristY) Gesture.THUMBS_UP else Gesture.THUMBS_DOWN
         }
-        index && middle && !ring && !pinky -> Gesture.PEACE
+        // A margin, not just the flag: see PEACE_MIDDLE_MARGIN. A middle finger only barely past
+        // its knuckle belongs to a pointing hand, and calling it a peace sign is how the pointer
+        // ends up clicking when the user meant to move.
+        index && middle && !ring && !pinky ->
+            if (fingerReachesBeyond(landmarks, 12, 10, PEACE_MIDDLE_MARGIN)) {
+                Gesture.PEACE
+            } else {
+                Gesture.POINT
+            }
         index && !middle && !ring && !pinky -> Gesture.POINT
         else -> Gesture.UNKNOWN
     }

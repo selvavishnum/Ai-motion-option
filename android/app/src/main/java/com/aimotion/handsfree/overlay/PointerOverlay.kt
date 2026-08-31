@@ -47,8 +47,18 @@ class PointerOverlay(private val context: Context) {
     var isShowing: Boolean = false
         private set
 
-    /** Moves the dot, adding it to the window first if needed. Safe to call from any thread. */
-    fun moveTo(xPx: Int, yPx: Int) {
+    /** Which drawable the view currently shows, so a redraw is only requested when it changes.
+     * Confined to the main thread with the rest of the view state. */
+    private var showingPenDown: Boolean? = null
+
+    /**
+     * Moves the dot, adding it to the window first if needed. Safe to call from any thread.
+     *
+     * @param penDown whether a drag is in progress. Drawn differently, because the dot is the
+     *   only thing on screen that knows: a pen the user cannot see is down draws a line across
+     *   whatever they were only meaning to look at.
+     */
+    fun moveTo(xPx: Int, yPx: Int, penDown: Boolean = false) {
         lastX = xPx
         lastY = yPx
         handler.post {
@@ -56,6 +66,12 @@ class PointerOverlay(private val context: Context) {
             val wm = windowManager ?: attach() ?: return@post
             val lp = params ?: return@post
             val v = view ?: return@post
+            if (showingPenDown != penDown) {
+                showingPenDown = penDown
+                v.setBackgroundResource(
+                    if (penDown) R.drawable.pointer_dot_down else R.drawable.pointer_dot,
+                )
+            }
             // Centre the dot on the fingertip rather than hanging it off the corner.
             lp.x = xPx - POINTER_SIZE_PX / 2
             lp.y = yPx - POINTER_SIZE_PX / 2
@@ -73,6 +89,7 @@ class PointerOverlay(private val context: Context) {
             windowManager = null
             view = null
             params = null
+            showingPenDown = null
             isShowing = false
         }
     }

@@ -30,4 +30,16 @@ object ActionDispatcher {
     fun tapAt(x: Float, y: Float) {
         serviceRef?.get()?.tapAt(x, y)
     }
+
+    fun startDrag(x: Float, y: Float) {
+        serviceRef?.get()?.startDrag(x, y)
+    }
+
+    fun continueDrag(x: Float, y: Float) {
+        serviceRef?.get()?.continueDrag(x, y)
+    }
+
+    fun endDrag(x: Float, y: Float) {
+        serviceRef?.get()?.endDrag(x, y)
+    }
 }

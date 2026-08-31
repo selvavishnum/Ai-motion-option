@@ -26,5 +26,5 @@
     <string name="screen_off_hint">Releases the camera while the screen is off — by far the biggest battery saving available. Wave gestures keep working either way.</string>
     <string name="battery_hint">Opens Android\'s battery settings. Find Air Sensor in the list and set it to unrestricted, or gesture control will be shut down in the background.</string>
     <string name="sensitivity_hint">Triggering when you didn\'t mean it? Lower this. Having to move a long way before it notices? Raise it. Takes effect immediately — no restart.</string>
-    <string name="training_hint">A gesture keeps being missed? Record a few examples of how you actually make it, and the app matches your hand instead of a built-in rule. Needs gesture control switched on.</string>
+    <string name="training_hint">There is nothing to set up. The app watches how you actually make each gesture as you use it and gradually matches your hand instead of a built-in rule, so recognition improves over the first few days on its own.</string>
 </resources>
